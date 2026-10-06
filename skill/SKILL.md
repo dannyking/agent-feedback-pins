@@ -12,7 +12,7 @@ text, position and author. Comments land in `.agent-feedback-pins/`:
 - `feedback.jsonl`: one JSON comment per line, the source of truth.
 - `FEEDBACK.md`: a readable rendering grouped by page, regenerated on every change. Read this one.
 
-Source: https://github.com/dannyking/agent-feedback-pins (private). Local clone:
+Source: https://github.com/dannyking/agent-feedback-pins (MIT). Local clone, if any:
 `~/projects/agent-feedback-pins`.
 
 It must never ship to production. Every integration below is dev-only, and removing it is a

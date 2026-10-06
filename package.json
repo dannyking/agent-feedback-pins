@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Leave pinned UI feedback on any element of a web app during development, saved to files an AI agent can batch into a plan. Dev-only and trivial to remove.",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "type": "module",
   "bin": {
     "agent-feedback-pins": "./bin/agent-feedback-pins.js"

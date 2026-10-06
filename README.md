@@ -26,15 +26,30 @@ integration block.
 - `skill/SKILL.md`: an agent skill that installs it to fit the project's stack, processes the
   feedback, and removes it.
 
-## Quick start
+## Install the skill
 
-With Claude Code, link the skill once:
+The skill (`skill/SKILL.md`) lets your coding agent add this to a project in a way that fits its
+stack, work through the feedback, and remove it before shipping. Clone the repo once, then link
+the skill where your agent looks for skills:
 
 ```sh
+git clone https://github.com/dannyking/agent-feedback-pins ~/projects/agent-feedback-pins
+
+# Claude Code
 ln -s ~/projects/agent-feedback-pins/skill ~/.claude/skills/agent-feedback-pins
+
+# Codex, OpenCode and Pi all read the shared Agent Skills folder
+mkdir -p ~/.agents/skills
+ln -s ~/projects/agent-feedback-pins/skill ~/.agents/skills/agent-feedback-pins
 ```
 
-Then in any project: "add agent feedback pins". Or by hand, for a Vite app:
+OpenCode also reads `~/.claude/skills`, and has its own `~/.config/opencode/skills`; Pi has
+`~/.pi/agent/skills`. Any of them works. Restart the agent, then ask it in any project to "add
+agent feedback pins". Later: "look at my in-app feedback", or "remove the feedback pins".
+
+## Install by hand
+
+For a Vite app:
 
 ```sh
 pnpm add -D github:dannyking/agent-feedback-pins
@@ -46,7 +61,7 @@ import agentFeedbackPins from "agent-feedback-pins/vite";
 export default { plugins: [agentFeedbackPins({ mountBefore: "#user-menu" })] };
 ```
 
-Any other stack: run `npx agent-feedback-pins serve` and add
+Any other stack: run `npx github:dannyking/agent-feedback-pins serve` and add
 `<script src="http://127.0.0.1:4499/__afp/client.js" defer></script>` to your dev layout.
 
 ## Script attributes
@@ -59,7 +74,7 @@ Any other stack: run `npx agent-feedback-pins serve` and add
 - `window.agentFeedbackPins = { headers: () => ({...}) }` adds headers to API calls, for apps that
   authenticate with bearer tokens.
 
-## Authors
+## Comment authors
 
 By default comments are attributed to the git identity of whoever runs the dev server. Apps with
 their own logins can pass `author: (req) => ({ name, email })` to `createHandler` so each
@@ -68,6 +83,13 @@ mark it done.
 
 ## Develop
 
+To work on agent-feedback-pins itself: there is no build step, so edit the files and run the
+tests (store, HTTP API and HTML injection) with:
+
 ```sh
 node --test test/*.test.js
 ```
+
+## License
+
+MIT
