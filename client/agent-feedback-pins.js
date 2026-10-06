@@ -293,7 +293,7 @@
   const pinsLayer = h("div");
   const editorSlot = h("div");
   const panelSlot = h("div");
-  overlayRoot.append(h("style", {}, OVERLAY_CSS), highlight, pinsLayer, editorSlot, panelSlot);
+  overlayRoot.append(h("style", {}, OVERLAY_CSS), highlight, pinsLayer, panelSlot, editorSlot); // editor last so it paints above the panel
 
   const globalStyle = h("style", { "data-agent-feedback-pins": "" }, GLOBAL_CSS);
 
