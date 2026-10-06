@@ -96,7 +96,7 @@ async function readJson(req) {
 const escapeAttr = (s) => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
 /**
- * The <script> tag that loads the client. Options: base or src, mountBefore, mount, and
+ * The <script> tag that loads the client. Options: base or src, mountBefore, mount, dockOnly, and
  * head (raw HTML to put before it, e.g. a <style> mapping --afp-* colors to the app's theme).
  */
 export function scriptTag(options = {}) {
@@ -105,6 +105,7 @@ export function scriptTag(options = {}) {
     `src="${escapeAttr(src)}"`,
     options.mountBefore && `data-mount-before="${escapeAttr(options.mountBefore)}"`,
     options.mount && `data-mount="${escapeAttr(options.mount)}"`,
+    options.dockOnly && "data-dock-only",
     "data-agent-feedback-pins",
     "defer",
   ].filter(Boolean);

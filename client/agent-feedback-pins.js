@@ -7,6 +7,7 @@
  *   data-endpoint="/__afp"          where the collector lives (default: the script's folder)
  *   data-mount-before="<selector>"  dock the toggle button just before this element
  *   data-mount="<selector>"         or append it inside this element
+ *   data-dock-only                  hide the button while that element isn't on the page
  * With neither, the button floats bottom-left.
  *
  * Optional page config, set before the script runs:
@@ -274,6 +275,9 @@
       buttonHost.removeAttribute("data-floating");
       if (before && buttonHost.nextElementSibling !== target) target.before(buttonHost);
       if (!before && buttonHost.parentElement !== target) target.append(buttonHost);
+    } else if (script?.hasAttribute("data-dock-only")) {
+      if (buttonHost.isConnected) setActive(false);
+      buttonHost.remove();
     } else {
       // No dock (or not rendered yet, or the page has none): float in the corner.
       buttonHost.setAttribute("data-floating", "");

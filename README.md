@@ -53,7 +53,8 @@ Any other stack: run `npx agent-feedback-pins serve` and add
 
 - `data-mount-before="<selector>"` docks the button just before an element (for example your
   header's user menu). `data-mount="<selector>"` appends it inside one. Otherwise it floats
-  bottom-left.
+  bottom-left. Add `data-dock-only` to hide it while that element isn't on the page (for example
+  on a sign-in screen).
 - `data-endpoint` overrides where the API lives (default: the script's folder).
 - `window.agentFeedbackPins = { headers: () => ({...}) }` adds headers to API calls, for apps that
   authenticate with bearer tokens.
