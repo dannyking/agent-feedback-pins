@@ -7,6 +7,16 @@ comments are saved to a Markdown file in the project. Your agent picks them up a
 them when you use the included skill, or when you ask it to resolve the in-app comments you left.
 It's easy to remove when you're ready to ship.
 
+## Install
+
+Tell your coding agent (Claude Code, Codex, OpenCode, Pi or similar):
+
+> Add https://github.com/dannyking/agent-feedback-pins to this project
+
+It sets things up to fit your stack. Then click **Feedback** in your app, leave comments, and ask
+your agent to "resolve my in-app comments". When you're ready to ship: "remove the feedback pins".
+To have the skill available in every project, see [Install the skill](#install-the-skill).
+
 - Click **Feedback** in the app, click anything, type what should change.
 - Each comment is saved with the page, the element's selector, its nearest heading and text, its
   position, and who wrote it.
@@ -93,6 +103,25 @@ tests (store, HTTP API and HTML injection) with:
 ```sh
 node --test test/*.test.js
 ```
+
+## For AI agents
+
+If a user asks you to add this repo to their project:
+
+1. Read [`skill/SKILL.md`](skill/SKILL.md)
+   (raw: https://raw.githubusercontent.com/dannyking/agent-feedback-pins/master/skill/SKILL.md)
+   and follow its **Install** section. Look at the project's stack first and pick the matching
+   integration; keep it dev-only and in as few places as possible.
+2. Install the package as a dev dependency from GitHub
+   (`pnpm add -D github:dannyking/agent-feedback-pins`, or the npm, yarn or bun equivalent). It
+   isn't published to npm. Non-JavaScript projects run the standalone collector instead.
+3. Check it works: start the dev server, leave a comment, and confirm it appears in
+   `.agent-feedback-pins/FEEDBACK.md`.
+4. Offer to install the skill for the user (see [Install the skill](#install-the-skill)) so you
+   can process and remove the feedback later. Don't link it without asking.
+5. Tell the user where the Feedback button is and how to ask you to process their comments.
+
+When asked to process or remove the feedback, follow the matching section of `skill/SKILL.md`.
 
 ## License
 
