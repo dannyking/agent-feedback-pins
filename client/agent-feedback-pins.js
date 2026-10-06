@@ -8,7 +8,9 @@
  *   data-mount-before="<selector>"  dock the toggle button just before this element
  *   data-mount="<selector>"         or append it inside this element
  *   data-dock-only                  hide the button while that element isn't on the page
- * With neither, the button floats bottom-left.
+ * With neither, the button floats bottom-left. People can override all of this (and the theme,
+ * button label and icon, keyboard shortcut and pins) from the settings modal; those choices are
+ * saved to settings.json beside the feedback.
  *
  * Optional page config, set before the script runs:
  *   window.agentFeedbackPins = { headers: () => ({ authorization: "Bearer ..." }) }
@@ -46,9 +48,31 @@
     me: { author: { name: "", email: "" }, file: ".agent-feedback-pins/FEEDBACK.md" },
     draft: null, // { element, at: {x, y}, editing? }
     panelEditing: null, // id of the panel comment being edited inline
-    modal: null, // "history" while the all-comments modal is open
+    modal: null, // "history" or "settings" while a modal is open
     historyFilter: "all", // all | open | resolved
+    settings: {}, // as saved; prefs() fills in the defaults
+    picking: false, // choosing a spot for the button
+    recording: false, // recording a new keyboard shortcut
   };
+
+  const DEFAULTS = {
+    theme: { accent: "", mode: "" }, // "" follows the --afp-* variables
+    button: { label: "Feedback", icon: "chat", show: "both" },
+    position: { mode: "default", corner: "bottom-left", selector: "", place: "before" },
+    shortcut: "Alt+Shift+F",
+    showPins: true,
+  };
+
+  function prefs() {
+    const s = state.settings;
+    return {
+      theme: { ...DEFAULTS.theme, ...s.theme },
+      button: { ...DEFAULTS.button, ...s.button },
+      position: { ...DEFAULTS.position, ...s.position },
+      shortcut: s.shortcut ?? DEFAULTS.shortcut,
+      showPins: s.showPins ?? DEFAULTS.showPins,
+    };
+  }
 
   async function reload() {
     try {
@@ -184,7 +208,10 @@
   const BUTTON_CSS = `${VARS}
     :host { display: inline-flex; }
     :host([data-floating]) { position: fixed; left: 16px; bottom: 16px; z-index: 2147483000; }
+    :host([data-floating*="right"]) { left: auto; right: 16px; }
+    :host([data-floating^="top"]) { bottom: auto; top: 16px; }
     :host([data-floating]) .t { background: var(--p); box-shadow: 0 4px 16px rgb(0 0 0 / .15); }
+    :host([data-themed]) .t { background: var(--p); }
     .t { display: flex; align-items: center; gap: 8px; border-radius: 999px; border: 1px solid var(--l);
       padding: 6px 12px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--mu);
       transition: color .15s, background-color .15s, border-color .15s; }
@@ -266,6 +293,31 @@
     .log { margin: 4px 0 0; padding: 0; list-style: none; display: block; max-height: none; font-size: 10px; color: var(--di); }
     .log li { display: list-item; background: none; padding: 0; border-radius: 0; }
     .empty { margin-top: 16px; font-size: 12px; color: var(--mu); }
+    :host([data-corner="bottom-right"]) .panel { bottom: 64px; }
+    .head-actions { display: flex; align-items: center; gap: 12px; }
+    .icon-btn { display: flex; color: var(--mu); }
+    .icon-btn:hover { color: var(--fg); }
+    .settings { overflow-y: auto; margin-top: 4px; padding-right: 4px; }
+    .field { margin-top: 16px; }
+    .field > .label { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 600; }
+    .field .tabs { margin-top: 0; flex-wrap: wrap; }
+    .field .hint { margin-top: 6px; }
+    .swatches { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .sw { width: 24px; height: 24px; border-radius: 999px; border: 2px solid var(--p); box-shadow: 0 0 0 1px var(--l); }
+    .sw[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--fg); }
+    .sw.app { background: conic-gradient(#d303be, #2563eb, #16a34a, #ea580c, #d303be); }
+    input[type="color"] { width: 28px; height: 28px; padding: 0; border: 0; background: none; cursor: pointer; }
+    input[type="text"] { width: 100%; border-radius: 8px; border: 1px solid var(--l); background: ${mix("--in", 60)};
+      padding: 6px 8px; font: inherit; font-size: 13px; color: var(--fg); outline: none; }
+    input[type="text"]:focus { border-color: var(--a); }
+    .tabs.icons button { display: flex; padding: 6px 8px; }
+    .check { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+    .check input { accent-color: var(--a); width: 16px; height: 16px; margin: 0; }
+    kbd { border-radius: 6px; border: 1px solid var(--l); background: ${mix("--in", 60)}; padding: 3px 8px; font: inherit;
+      font-size: 12px; font-weight: 600; }
+    code { font-size: 11px; color: var(--mu); word-break: break-all; }
+    .banner { left: 50%; top: 16px; transform: translateX(-50%); padding: 10px 16px; font-size: 13px; font-weight: 600;
+      border: 1px solid ${mix("--a", 60)}; color: var(--at); }
   `;
 
   const GLOBAL_CSS = `
@@ -277,41 +329,73 @@
 
   const buttonHost = document.createElement("agent-feedback-pins-button");
   const buttonRoot = buttonHost.attachShadow({ mode: "open" });
-  const ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
+  const ICONS = {
+    chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    pin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+    pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+    flag: '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/>',
+    megaphone: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
+    eye: '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
+    gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+  };
+
+  function icon(name, size = 14) {
+    const t = document.createElement("template");
+    t.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] ?? ICONS.chat}</svg>`;
+    return t.content.firstChild;
+  }
 
   function renderButton() {
     const open = state.items.filter((i) => i.status === "open").length;
+    const { button, shortcut } = prefs();
+    const label = button.label.trim() || "Feedback";
+    // An empty label means icon only, whatever the display choice.
+    const showText = button.show !== "icon" && (button.show === "text" || !!button.label.trim());
     const btn = h(
       "button",
       {
         type: "button",
         className: "t",
-        title: "Feedback mode: click any part of the app to leave a comment",
+        title: `Feedback mode: click any part of the app to leave a comment${shortcut ? ` (${keyLabel(shortcut)})` : ""}`,
+        "aria-label": state.active ? "Exit feedback mode" : label,
         "aria-pressed": String(state.active),
         onClick: () => setActive(!state.active),
       },
-      h("span", { className: "label" }, state.active ? "Done" : "Feedback"),
+      button.show !== "text" || !showText ? icon(button.icon) : null,
+      showText ? h("span", { className: "label" }, state.active ? "Done" : label) : null,
       open > 0 ? h("span", { className: "badge" }, String(open)) : null,
     );
-    btn.insertAdjacentHTML("afterbegin", ICON);
     buttonRoot.replaceChildren(h("style", {}, BUTTON_CSS), btn);
   }
 
   /** Keep the button docked where the page asked, even as a SPA re-renders around it. */
   function dock() {
-    const before = attr("data-mount-before");
-    const inside = attr("data-mount");
-    const target = before || inside ? document.querySelector(before || inside) : null;
+    const { position } = prefs();
+    let selector = attr("data-mount-before") || attr("data-mount");
+    let place = attr("data-mount-before") ? "before" : "inside";
+    if (position.mode === "floating") selector = undefined;
+    if (position.mode === "custom" && position.selector) [selector, place] = [position.selector, position.place];
+    let target = null;
+    try {
+      target = selector ? document.querySelector(selector) : null;
+    } catch {
+      // A saved selector that no longer parses: float instead.
+    }
     if (target) {
       buttonHost.removeAttribute("data-floating");
-      if (before && buttonHost.nextElementSibling !== target) target.before(buttonHost);
-      if (!before && buttonHost.parentElement !== target) target.append(buttonHost);
-    } else if (script?.hasAttribute("data-dock-only")) {
+      overlayHost.removeAttribute("data-corner");
+      if (place === "before" && buttonHost.nextElementSibling !== target) target.before(buttonHost);
+      if (place === "after" && buttonHost.previousElementSibling !== target) target.after(buttonHost);
+      if (place === "inside" && buttonHost.parentElement !== target) target.append(buttonHost);
+    } else if (script?.hasAttribute("data-dock-only") && position.mode === "default") {
       if (buttonHost.isConnected) setActive(false);
       buttonHost.remove();
     } else {
       // No dock (or not rendered yet, or the page has none): float in the corner.
-      buttonHost.setAttribute("data-floating", "");
+      const corner = position.mode === "floating" ? position.corner : "bottom-left";
+      if (buttonHost.getAttribute("data-floating") !== corner) buttonHost.setAttribute("data-floating", corner);
+      // The panel moves up when the button would sit under it.
+      if (overlayHost.getAttribute("data-corner") !== corner) overlayHost.setAttribute("data-corner", corner);
       if (buttonHost.parentElement !== document.body) document.body.append(buttonHost);
     }
   }
@@ -348,6 +432,7 @@
   }
 
   function renderPins() {
+    if (!prefs().showPins) return pinsLayer.replaceChildren();
     pinsLayer.replaceChildren(
       ...pageItems()
         .map((item) => {
@@ -540,7 +625,17 @@
       h(
         "div",
         { className: "card panel" },
-        h("div", { className: "row" }, h("div", { className: "title" }, "Feedback mode"), h("button", { type: "button", className: "quiet", style: { fontSize: "12px" }, onClick: () => setActive(false) }, "Exit (Esc)")),
+        h(
+          "div",
+          { className: "row" },
+          h("div", { className: "title" }, "Feedback mode"),
+          h(
+            "div",
+            { className: "head-actions" },
+            h("button", { type: "button", className: "icon-btn", title: "Settings", "aria-label": "Settings", onClick: () => openModal("settings") }, icon("gear", 16)),
+            h("button", { type: "button", className: "quiet", style: { fontSize: "12px" }, onClick: () => setActive(false) }, "Exit (Esc)"),
+          ),
+        ),
         h("p", { className: "hint" }, "Click any part of the page to comment on it. Comments are saved for your next planning session."),
         h("button", { type: "button", className: "whole", onClick: () => openEditor({ element: null, at: { x: innerWidth - 380, y: innerHeight - 320 } }) }, "Comment on this whole page"),
         items.length ? h("ul", {}, items.map(panelItem)) : null,
@@ -576,6 +671,7 @@
 
   function closeModal() {
     state.modal = null;
+    state.recording = false;
     modalSlot.replaceChildren();
   }
 
@@ -627,7 +723,7 @@
 
   function renderModal() {
     if (!state.modal) return modalSlot.replaceChildren();
-    const body = renderHistory();
+    const body = state.modal === "settings" ? renderSettings() : renderHistory();
     modalSlot.replaceChildren(
       h(
         "div",
@@ -637,13 +733,244 @@
     );
   }
 
+  // ---------- Settings ----------
+
+  const ACCENTS = ["#d303be", "#7c3aed", "#2563eb", "#0891b2", "#16a34a", "#ea580c", "#dc2626", "#475569"];
+  const DARK = {
+    panel: "#1c1c22",
+    "panel-2": "#272730",
+    input: "#2a2a33",
+    line: "#3a3a46",
+    fg: "#f2f2f5",
+    muted: "#b4b4c2",
+    dim: "#8a8a9e",
+    danger: "#ff6b52",
+    "avatar-text": "#b3abff",
+  };
+  const LIGHT = { panel: "#ffffff", "panel-2": "#f5f5fe", input: "#f7f7f8", line: "#e0e0e4", fg: "#141418", muted: "#4f5062", dim: "#828395", danger: "#e22c10", "avatar-text": "#4a3ed0" };
+  const darkQuery = matchMedia("(prefers-color-scheme: dark)");
+
+  /** Set the chosen theme as --afp-* overrides on our hosts; unset choices leave the page's own. */
+  function applyTheme() {
+    const { accent, mode } = prefs().theme;
+    const dark = mode === "dark" || (mode === "auto" && darkQuery.matches);
+    const vars = mode ? { ...(dark ? DARK : LIGHT) } : {};
+    if (accent) vars.accent = accent;
+    // Accent text that reads on the panel: the accent pulled toward the foreground color.
+    if (accent || mode) vars["accent-text"] = `color-mix(in srgb, var(--afp-accent, #d303be) 70%, var(--afp-fg, #141418))`;
+    // A chosen light or dark mode won't match the page, so a docked button gets its own background.
+    buttonHost.toggleAttribute("data-themed", !!mode);
+    for (const host of [buttonHost, overlayHost]) {
+      for (const name of [...host.style]) if (name.startsWith("--afp-")) host.style.removeProperty(name);
+      for (const [k, v] of Object.entries(vars)) host.style.setProperty(`--afp-${k}`, v);
+    }
+  }
+  darkQuery.addEventListener?.("change", applyTheme);
+
+  function applySettings() {
+    applyTheme();
+    renderButton();
+    dock();
+    if (state.active) renderPanel();
+  }
+
+  let settingsError = "";
+  async function saveSettings(change) {
+    const next = structuredClone(state.settings);
+    change(next);
+    state.settings = JSON.parse(JSON.stringify(next)); // drop cleared (undefined) choices
+    applySettings();
+    try {
+      state.settings = await call("/api/settings", "PUT", state.settings);
+      settingsError = "";
+    } catch (x) {
+      settingsError = `Couldn't save: ${x.message}`;
+    }
+    if (state.modal === "settings") renderModal();
+  }
+
+  const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+  const MODS = ["Ctrl", "Alt", "Shift", "Meta"];
+
+  /** "Alt+Shift+F" for a keydown, using the physical key so Option on a Mac still gives F. */
+  function comboOf(e) {
+    const key = /^Key[A-Z]$|^Digit\d$/.test(e.code) ? e.code.slice(-1) : e.code;
+    const mods = MODS.filter((m) => e[`${m.toLowerCase()}Key`]);
+    return [...mods, key].join("+");
+  }
+
+  function keyLabel(combo) {
+    if (!isMac) return combo.replace("Meta", "Win");
+    const sym = { Ctrl: "⌃", Alt: "⌥", Shift: "⇧", Meta: "⌘" };
+    return combo
+      .split("+")
+      .map((p) => sym[p] ?? p)
+      .join("");
+  }
+
+  // Always listening: the shortcut toggles Feedback mode, and settings can record a new one.
+  document.addEventListener(
+    "keydown",
+    (e) => {
+      if (state.recording) {
+        if (["Control", "Alt", "Shift", "Meta"].includes(e.key)) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (e.key === "Escape") return ((state.recording = false), renderModal());
+        if (!e.ctrlKey && !e.altKey && !e.metaKey) return ((settingsError = "Include Ctrl, Alt or ⌘ so it doesn't fire while typing."), renderModal());
+        state.recording = false;
+        settingsError = "";
+        void saveSettings((s) => (s.shortcut = comboOf(e)));
+        return;
+      }
+      const { shortcut } = prefs();
+      if (!shortcut || e.repeat || comboOf(e) !== shortcut) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      setActive(!state.active);
+    },
+    true,
+  );
+
+  function startPicking() {
+    state.picking = true;
+    closeModal();
+    editorSlot.replaceChildren(h("div", { className: "card banner" }, "Click where the button should go · Esc to cancel"));
+  }
+
+  function stopPicking(target) {
+    state.picking = false;
+    editorSlot.replaceChildren();
+    highlight.style.display = "none";
+    const selector = target && cssPath(target);
+    if (selector) void saveSettings((s) => (s.position = { ...s.position, mode: "custom", selector }));
+    openModal("settings");
+  }
+
+  function renderSettings() {
+    const p = prefs();
+    const docked = !!(attr("data-mount-before") || attr("data-mount"));
+    const seg = (options, current, pick, className = "tabs") =>
+      h(
+        "div",
+        { className },
+        options.map(([value, label, title]) =>
+          h("button", { type: "button", title, "aria-pressed": String(current === value), onClick: () => void saveSettings((s) => pick(s, value)) }, label),
+        ),
+      );
+    const field = (label, ...body) => h("div", { className: "field" }, h("div", { className: "label" }, label), ...body);
+    const set = (key) => (s, v) => (s[key] = { ...s[key], ...v });
+
+    const custom = !ACCENTS.includes(p.theme.accent) && p.theme.accent;
+    const swatches = h(
+      "div",
+      { className: "swatches" },
+      h("button", { type: "button", className: "sw app", title: "The app's theme (--afp-accent)", "aria-pressed": String(!p.theme.accent), onClick: () => void saveSettings((s) => set("theme")(s, { accent: undefined })) }),
+      ACCENTS.map((c) =>
+        h("button", { type: "button", className: "sw", title: c, style: { background: c }, "aria-pressed": String(p.theme.accent === c), onClick: () => void saveSettings((s) => set("theme")(s, { accent: c })) }),
+      ),
+      h("input", {
+        type: "color",
+        title: "Custom color",
+        value: custom || "#d303be",
+        onChange: (e) => void saveSettings((s) => set("theme")(s, { accent: e.target.value })),
+      }),
+    );
+
+    const label = h("input", {
+      type: "text",
+      value: p.button.label,
+      maxLength: 40,
+      placeholder: "Feedback",
+      onChange: (e) => void saveSettings((s) => set("button")(s, { label: e.target.value })),
+    });
+
+    const icons = h(
+      "div",
+      { className: "tabs icons" },
+      Object.keys(ICONS)
+        .filter((n) => n !== "gear")
+        .map((n) =>
+          h("button", { type: "button", title: n, "aria-label": n, "aria-pressed": String(p.button.icon === n), onClick: () => void saveSettings((s) => set("button")(s, { icon: n })) }, icon(n, 16)),
+        ),
+    );
+
+    const position = [
+      seg(
+        [
+          ["default", docked ? "Where the app put it" : "Default (bottom-left)"],
+          ["floating", "Floating"],
+          ["custom", "Pick a spot"],
+        ],
+        p.position.mode,
+        (s, mode) => {
+          set("position")(s, { mode });
+          if (mode === "custom" && !p.position.selector) queueMicrotask(startPicking);
+        },
+      ),
+      p.position.mode === "floating"
+        ? h("div", { style: { marginTop: "8px" } }, seg([["bottom-left", "Bottom left"], ["bottom-right", "Bottom right"], ["top-left", "Top left"], ["top-right", "Top right"]], p.position.corner, (s, corner) => set("position")(s, { corner })))
+        : null,
+      p.position.mode === "custom"
+        ? h(
+            "div",
+            { style: { marginTop: "8px" } },
+            p.position.selector
+              ? h("div", { className: "row" }, seg([["before", "Before"], ["after", "After"], ["inside", "Inside"]], p.position.place, (s, place) => set("position")(s, { place })), h("button", { type: "button", className: "link quiet", style: { fontSize: "12px" }, onClick: startPicking }, "Pick again"))
+              : null,
+            p.position.selector ? h("p", { className: "hint" }, "Next to ", h("code", {}, p.position.selector), ". It floats on pages without that element.") : null,
+          )
+        : null,
+    ];
+
+    const shortcut = h(
+      "div",
+      { className: "row", style: { justifyContent: "flex-start", gap: "12px" } },
+      h("kbd", {}, state.recording ? "Press keys…" : p.shortcut ? keyLabel(p.shortcut) : "Off"),
+      h("button", { type: "button", className: "link quiet", style: { fontSize: "12px" }, onClick: () => ((state.recording = !state.recording), (settingsError = ""), renderModal()) }, state.recording ? "Cancel" : "Change"),
+      p.shortcut ? h("button", { type: "button", className: "link quiet", style: { fontSize: "12px" }, onClick: () => void saveSettings((s) => (s.shortcut = "")) }, "Turn off") : null,
+      p.shortcut !== DEFAULTS.shortcut ? h("button", { type: "button", className: "link quiet", style: { fontSize: "12px" }, onClick: () => void saveSettings((s) => delete s.shortcut) }, `Reset to ${keyLabel(DEFAULTS.shortcut)}`) : null,
+    );
+
+    return [
+      h("div", { className: "row" }, h("div", { className: "title" }, "Settings"), h("button", { type: "button", className: "x", title: "Close (Esc)", "aria-label": "Close", onClick: closeModal }, "×")),
+      h(
+        "div",
+        { className: "settings" },
+        field("Accent color", swatches),
+        field("Light or dark", seg([["", "App theme"], ["light", "Light"], ["dark", "Dark"], ["auto", "Match system"]], p.theme.mode, (s, mode) => set("theme")(s, { mode: mode || undefined }))),
+        field("Button label", label),
+        field("Button icon", icons),
+        field("Show", seg([["both", "Icon and label"], ["icon", "Icon only"], ["text", "Label only"]], p.button.show, (s, show) => set("button")(s, { show }))),
+        field("Button position", ...position),
+        field("Keyboard shortcut for Feedback mode", shortcut),
+        field(
+          "Pins",
+          h(
+            "label",
+            { className: "check" },
+            h("input", { type: "checkbox", checked: p.showPins, onChange: (e) => void saveSettings((s) => (s.showPins = e.target.checked)) }),
+            "Show numbered pins on open comments",
+          ),
+        ),
+        settingsError ? h("div", { className: "err" }, settingsError) : null,
+        h(
+          "div",
+          { className: "row foot" },
+          h("span", {}, `Saved to ${state.me.file.replace(/FEEDBACK\.md$/, "settings.json")}`),
+          h("button", { type: "button", className: "link danger", onClick: () => void saveSettings((s) => Object.keys(s).forEach((k) => delete s[k])) }, "Reset all"),
+        ),
+      ),
+    ];
+  }
+
   // ---------- Feedback mode on and off ----------
 
   const isUi = (e) => e.composedPath().some((n) => n === overlayHost || n === buttonHost);
 
   const listeners = {
     mousemove: (e) => {
-      if (state.draft || state.modal || isUi(e) || !(e.target instanceof Element)) return (highlight.style.display = "none");
+      if ((state.draft && !state.picking) || state.modal || isUi(e) || !(e.target instanceof Element)) return (highlight.style.display = "none");
       const r = e.target.getBoundingClientRect();
       Object.assign(highlight.style, {
         display: "",
@@ -657,6 +984,7 @@
       if (isUi(e) || !(e.target instanceof Element)) return;
       e.preventDefault();
       e.stopPropagation();
+      if (state.picking) return stopPicking(e.target);
       if (state.draft) return;
       openEditor({ element: describe(e.target), at: { x: e.clientX, y: e.clientY } });
     },
@@ -668,7 +996,8 @@
     },
     keydown: (e) => {
       if (e.key !== "Escape") return;
-      if (state.modal) closeModal();
+      if (state.picking) stopPicking(null);
+      else if (state.modal) closeModal();
       else if (state.panelEditing) {
         state.panelEditing = null;
         renderPanel();
@@ -701,6 +1030,7 @@
       removeEventListener("resize", onResize);
       closeEditor();
       closeModal();
+      state.picking = state.recording = false;
       state.panelEditing = null;
       highlight.style.display = "none";
       overlayHost.remove();
@@ -712,15 +1042,19 @@
 
   // ---------- Start ----------
 
-  function start() {
-    renderButton();
-    dock();
-    new MutationObserver(dock).observe(document.body, { childList: true, subtree: true });
+  async function start() {
     call("/api/me")
       .then((me) => (state.me = me))
       .catch(() => {});
+    // Wait briefly for saved settings so the button doesn't appear in one place and jump.
+    const settings = call("/api/settings").catch(() => ({}));
+    state.settings = await Promise.race([settings, new Promise((r) => setTimeout(() => r({}), 1500))]);
+    applyTheme();
+    renderButton();
+    dock();
+    new MutationObserver(dock).observe(document.body, { childList: true, subtree: true });
     void reload();
   }
-  if (document.body) start();
-  else document.addEventListener("DOMContentLoaded", start);
+  if (document.body) void start();
+  else document.addEventListener("DOMContentLoaded", () => void start());
 })();

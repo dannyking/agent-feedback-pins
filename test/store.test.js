@@ -80,6 +80,15 @@ test("handler serves the client and the API", async () => {
     const del = await fetch(`${base}/__afp/api/items/${item.id}`, { method: "DELETE", headers: { "x-user": "jo" } });
     assert.equal(del.status, 200);
     assert.deepEqual(await (await fetch(`${base}/__afp/api/items`)).json(), []);
+    assert.deepEqual(await (await fetch(`${base}/__afp/api/settings`)).json(), {});
+    const put = await fetch(`${base}/__afp/api/settings`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ theme: { accent: "#2563eb", mode: "sepia" }, button: { show: "icon" }, shortcut: "Ctrl+Alt+K", showPins: false, extra: 1 }),
+    });
+    const saved = { theme: { accent: "#2563eb" }, button: { show: "icon" }, position: {}, shortcut: "Ctrl+Alt+K", showPins: false };
+    assert.deepEqual(await put.json(), saved); // unknown values dropped
+    assert.deepEqual(await (await fetch(`${base}/__afp/api/settings`)).json(), saved);
   } finally {
     server.close();
   }

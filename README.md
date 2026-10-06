@@ -26,6 +26,7 @@ To have the skill available in every project, see [Install the skill](#install-t
 - **View all and resolved** in the Feedback panel lists every comment, open and resolved, with a
   log of who resolved each one and when (which agent, or which person). Mark a resolved comment
   unresolved to send it back; it shows up in `FEEDBACK.md` as reopened, with its history.
+- **Alt+Shift+F** (⌥⇧F on a Mac) toggles Feedback mode from anywhere in the app.
 - Tell your agent "look at my in-app feedback" and it plans, fixes and marks them done.
 
 It is dev-only and built to be removed before shipping: one dev dependency and one
@@ -87,11 +88,26 @@ Any other stack: run `npx github:dannyking/agent-feedback-pins serve` and add
 
 - `data-mount-before="<selector>"` docks the button just before an element (for example your
   header's user menu). `data-mount="<selector>"` appends it inside one. Otherwise it floats
-  bottom-left. Add `data-dock-only` to hide it while that element isn't on the page (for example
+  bottom-left. These are defaults: people can move the button from [Settings](#settings). Add `data-dock-only` to hide it while that element isn't on the page (for example
   on a sign-in screen).
 - `data-endpoint` overrides where the API lives (default: the script's folder).
 - `window.agentFeedbackPins = { headers: () => ({...}) }` adds headers to API calls, for apps that
   authenticate with bearer tokens.
+
+## Settings
+
+The gear in the Feedback panel opens settings, saved to `.agent-feedback-pins/settings.json`
+(alongside the feedback, so they're per checkout):
+
+- **Accent color** (presets or any color) and **light, dark or match system**. Left on "App
+  theme", the overlay uses the `--afp-*` variables your agent mapped to the app's theme.
+- **Button label and icon**, shown as icon and label, icon only, or label only.
+- **Button position**: where the app put it (the script attributes), floating in a corner of
+  your choice, or a spot you pick by clicking an element on the page (before, after or inside
+  it). On pages without that element it floats.
+- **Keyboard shortcut** that toggles Feedback mode: record your own, or turn it off. It needs
+  Ctrl, Alt or ⌘ so it can't fire while you type.
+- **Pins**: hide the numbered pins on the page (the panel still lists the comments).
 
 ## Comment authors
 

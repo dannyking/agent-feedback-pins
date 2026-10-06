@@ -5,6 +5,16 @@ import { join } from "node:path";
 /** Statuses a comment moves through. */
 export const STATUSES = ["open", "planned", "done", "dismissed"];
 
+/** Choices the settings modal offers; anything else is dropped (and the client default used). */
+export const SETTINGS = {
+  modes: ["light", "dark", "auto"],
+  icons: ["chat", "pin", "pencil", "flag", "megaphone", "eye"],
+  shows: ["both", "icon", "text"],
+  positions: ["default", "floating", "custom"],
+  corners: ["bottom-left", "bottom-right", "top-left", "top-right"],
+  places: ["before", "after", "inside"],
+};
+
 const str = (v, max) => (typeof v === "string" ? v.slice(0, max) : undefined);
 
 function cleanElement(e) {
@@ -36,6 +46,23 @@ export class FeedbackStore {
     this.dir = dir;
     this.jsonl = join(dir, "feedback.jsonl");
     this.markdown = join(dir, "FEEDBACK.md");
+    this.settingsFile = join(dir, "settings.json");
+  }
+
+  /** The overlay's settings (theme, button, shortcut, pins), saved from its settings modal. */
+  getSettings() {
+    try {
+      return cleanSettings(JSON.parse(readFileSync(this.settingsFile, "utf8")));
+    } catch {
+      return {};
+    }
+  }
+
+  setSettings(input) {
+    const settings = cleanSettings(input);
+    this.ensureDir();
+    writeFileSync(this.settingsFile, JSON.stringify(settings, null, 2) + "\n");
+    return settings;
   }
 
   ensureDir() {
@@ -124,6 +151,26 @@ export class FeedbackStore {
   render() {
     this.save(this.list());
   }
+}
+
+export function cleanSettings(s) {
+  const one = (v, list) => (list.includes(v) ? v : undefined);
+  const { theme = {}, button = {}, position = {} } = s && typeof s === "object" ? s : {};
+  // Round-trip through JSON to drop the unset (undefined) fields.
+  return JSON.parse(
+    JSON.stringify({
+      theme: { accent: /^#[0-9a-f]{6}$/i.test(theme.accent) ? theme.accent : undefined, mode: one(theme.mode, SETTINGS.modes) },
+      button: { label: str(button.label, 40), icon: one(button.icon, SETTINGS.icons), show: one(button.show, SETTINGS.shows) },
+      position: {
+        mode: one(position.mode, SETTINGS.positions),
+        corner: one(position.corner, SETTINGS.corners),
+        selector: str(position.selector, 1000),
+        place: one(position.place, SETTINGS.places),
+      },
+      shortcut: str(s?.shortcut, 40),
+      showPins: typeof s?.showPins === "boolean" ? s.showPins : undefined,
+    }),
+  );
 }
 
 function cleanActor(a) {

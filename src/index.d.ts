@@ -19,8 +19,26 @@ export interface HistoryEntry {
   by: Actor;
 }
 
+/** The overlay's settings, saved to settings.json. Unset fields use the defaults. */
+export interface Settings {
+  /** accent: a #rrggbb color; unset uses --afp-accent or the built-in magenta. mode: unset follows the --afp-* variables. */
+  theme?: { accent?: string; mode?: "light" | "dark" | "auto" };
+  button?: { label?: string; icon?: "chat" | "pin" | "pencil" | "flag" | "megaphone" | "eye"; show?: "both" | "icon" | "text" };
+  /** default: where the script attributes dock it, else floating. custom: next to `selector`. */
+  position?: {
+    mode?: "default" | "floating" | "custom";
+    corner?: "bottom-left" | "bottom-right" | "top-left" | "top-right";
+    selector?: string;
+    place?: "before" | "after" | "inside";
+  };
+  /** Toggles Feedback mode, e.g. "Alt+Shift+F" (the default). "" turns it off. */
+  shortcut?: string;
+  /** Numbered pins on the page in Feedback mode. Default true. */
+  showPins?: boolean;
+}
+
 export interface HandlerOptions {
-  /** Where feedback.jsonl and FEEDBACK.md live. Default .agent-feedback-pins */
+  /** Where feedback.jsonl, FEEDBACK.md and settings.json live. Default .agent-feedback-pins */
   dir?: string;
   /** URL prefix. Default /__afp */
   base?: string;
@@ -55,6 +73,7 @@ export function cliActor(env?: Record<string, string | undefined>): Actor;
 /** The last time a comment was marked done or dismissed, if it was. */
 export function lastResolution(item: { history?: HistoryEntry[] }): HistoryEntry | undefined;
 export function renderMarkdown(items: unknown[]): string;
+export function cleanSettings(input: unknown): Settings;
 export const STATUSES: readonly ["open", "planned", "done", "dismissed"];
 export const DEFAULT_BASE: string;
 export const DEFAULT_DIR: string;
@@ -64,6 +83,9 @@ export class FeedbackStore {
   dir: string;
   jsonl: string;
   markdown: string;
+  settingsFile: string;
+  getSettings(): Settings;
+  setSettings(input: unknown): Settings;
   list(): any[];
   add(input: unknown): any;
   /** `by` is who is acting; status changes are appended to the comment's `history`. */

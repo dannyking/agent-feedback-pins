@@ -14,7 +14,7 @@ export const DEFAULT_BASE = "/__afp";
  * it with raw Node request and response objects (it returns true when it handled the request).
  *
  * Options:
- *   dir     where feedback.jsonl and FEEDBACK.md live (default .agent-feedback-pins)
+ *   dir     where feedback.jsonl, FEEDBACK.md and settings.json live (default .agent-feedback-pins)
  *   base    URL prefix (default /__afp)
  *   author  (req) => {name, email} | undefined, for apps with their own logins.
  *           Default: the git identity of whoever runs the server.
@@ -42,7 +42,7 @@ export function createHandler(options = {}) {
     };
     if (options.cors) {
       res.setHeader("access-control-allow-origin", req.headers.origin ?? "*");
-      res.setHeader("access-control-allow-methods", "GET, POST, PATCH, DELETE, OPTIONS");
+      res.setHeader("access-control-allow-methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
       res.setHeader("access-control-allow-headers", "content-type, authorization");
       if (req.method === "OPTIONS") return send(204, ""), true;
     }
@@ -51,6 +51,10 @@ export function createHandler(options = {}) {
         send(200, readFileSync(CLIENT, "utf8"), "text/javascript; charset=utf-8");
       } else if (path === "/api/me" && req.method === "GET") {
         send(200, { author: await authorOf(req), file: shown });
+      } else if (path === "/api/settings" && req.method === "GET") {
+        send(200, store.getSettings());
+      } else if (path === "/api/settings" && req.method === "PUT") {
+        send(200, store.setSettings(await readJson(req)));
       } else if (path === "/api/items" && req.method === "GET") {
         send(200, store.list());
       } else if (path === "/api/items" && req.method === "POST") {

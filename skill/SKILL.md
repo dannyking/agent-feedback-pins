@@ -51,7 +51,10 @@ theme tokens and its header. Then pick the lightest fitting option. Always:
 - Add `.agent-feedback-pins/` to `.gitignore` unless the user wants feedback in the repo.
 - Gate it on dev mode (or an env var like `AGENT_FEEDBACK_PINS=1`). Production must not load it.
 - Dock the button next to the app's own header controls with `mountBefore` / `mount` (a CSS
-  selector; prefer a stable id, aria-label or title). Without one it floats bottom-left.
+  selector; prefer a stable id, aria-label or title). Without one it floats bottom-left, which
+  is a fine default when there's no obvious spot. People can move it, retheme it, relabel it
+  and change its shortcut (Alt+Shift+F) from the panel's settings; those land in
+  `.agent-feedback-pins/settings.json`, so don't hard-code them elsewhere.
 - Match the app's look: set the `--afp-*` custom properties on `:root` to the app's tokens
   (see below). Inject this style with the script so removal stays one block.
 - Keep every touch point in as few places as possible and mark them with a comment containing
