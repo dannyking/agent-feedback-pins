@@ -46,6 +46,8 @@
     me: { author: { name: "", email: "" }, file: ".agent-feedback-pins/FEEDBACK.md" },
     draft: null, // { element, at: {x, y}, editing? }
     panelEditing: null, // id of the panel comment being edited inline
+    modal: null, // "history" while the all-comments modal is open
+    historyFilter: "all", // all | open | resolved
   };
 
   async function reload() {
@@ -56,6 +58,7 @@
     }
     renderButton();
     if (state.active) renderPanel();
+    if (state.modal) renderModal();
   }
 
   // ---------- Describing the clicked element ----------
@@ -134,6 +137,15 @@
   }
 
   const isOpen = (i) => i.status === "open" || i.status === "planned";
+  const lastResolution = (i) => (i.history ?? []).findLast((x) => x.status === "done" || x.status === "dismissed");
+  const ago = (iso) => {
+    const s = (Date.parse(iso) - Date.now()) / 1000;
+    const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+    for (const [unit, n] of [["year", 31536000], ["month", 2592000], ["day", 86400], ["hour", 3600], ["minute", 60]])
+      if (Math.abs(s) >= n) return rtf.format(Math.round(s / n), unit);
+    return "just now";
+  };
+  const when = (iso) => h("time", { dateTime: iso, title: new Date(iso).toLocaleString() }, ago(iso));
   const mine = (i) =>
     !i.author?.email || i.author.email.toLowerCase() === (state.me.author.email || "").toLowerCase();
   const initials = (name) =>
@@ -235,6 +247,25 @@
     .av { display: flex; height: 20px; width: 20px; flex-shrink: 0; align-items: center; justify-content: center;
       border-radius: 999px; background: ${mix("--av", 30)}; font-size: 9px; font-weight: 700; color: var(--avt); }
     .foot { margin-top: 12px; font-size: 11px; color: var(--di); }
+    .foot .link { font-weight: 600; color: var(--at); }
+    .backdrop { position: fixed; inset: 0; background: rgb(0 0 0 / .35); display: flex; align-items: center;
+      justify-content: center; padding: 16px; }
+    .modal { position: relative; display: flex; flex-direction: column; width: min(600px, 100%); max-height: min(720px, 100%);
+      border: 1px solid ${mix("--a", 50)}; }
+    .modal > ul { max-height: none; flex: 1; min-height: 0; }
+    .x { font-size: 20px; line-height: 1; color: var(--mu); padding: 0 4px; }
+    .x:hover { color: var(--fg); }
+    .tabs { margin-top: 12px; display: flex; gap: 4px; font-size: 12px; }
+    .tabs button { border-radius: 999px; padding: 4px 10px; color: var(--mu); border: 1px solid var(--l); }
+    .tabs button[aria-pressed="true"] { border-color: ${mix("--a", 70)}; background: ${mix("--a", 15)}; color: var(--at); font-weight: 600; }
+    .chip { border-radius: 999px; padding: 0 6px; font-size: 10px; font-weight: 700; line-height: 15px; text-transform: uppercase;
+      letter-spacing: .03em; background: ${mix("--a", 20)}; color: var(--at); }
+    .chip.done, .chip.dismissed { background: ${mix("--mu", 18)}; color: var(--mu); }
+    li.resolved .num { background: var(--di); }
+    li.resolved .text { color: var(--mu); }
+    .log { margin: 4px 0 0; padding: 0; list-style: none; display: block; max-height: none; font-size: 10px; color: var(--di); }
+    .log li { display: list-item; background: none; padding: 0; border-radius: 0; }
+    .empty { margin-top: 16px; font-size: 12px; color: var(--mu); }
   `;
 
   const GLOBAL_CSS = `
@@ -293,7 +324,9 @@
   const pinsLayer = h("div");
   const editorSlot = h("div");
   const panelSlot = h("div");
-  overlayRoot.append(h("style", {}, OVERLAY_CSS), highlight, pinsLayer, panelSlot, editorSlot); // editor last so it paints above the panel
+  const modalSlot = h("div");
+  // Later slots paint on top: the editor above the panel, a modal above both.
+  overlayRoot.append(h("style", {}, OVERLAY_CSS), highlight, pinsLayer, panelSlot, editorSlot, modalSlot);
 
   const globalStyle = h("style", { "data-agent-feedback-pins": "" }, GLOBAL_CSS);
 
@@ -511,10 +544,97 @@
         h("p", { className: "hint" }, "Click any part of the page to comment on it. Comments are saved for your next planning session."),
         h("button", { type: "button", className: "whole", onClick: () => openEditor({ element: null, at: { x: innerWidth - 380, y: innerHeight - 320 } }) }, "Comment on this whole page"),
         items.length ? h("ul", {}, items.map(panelItem)) : null,
-        h("div", { className: "foot" }, `${allOpen} open comment${allOpen === 1 ? "" : "s"} across the app · saved to ${state.me.file}`),
+        h(
+          "div",
+          { className: "foot" },
+          `${allOpen} open comment${allOpen === 1 ? "" : "s"} across the app · `,
+          h("button", { type: "button", className: "link", onClick: () => openModal("history") }, "View all and resolved"),
+          h("div", {}, `Saved to ${state.me.file}`),
+        ),
       ),
     );
     renderPins();
+  }
+
+  // ---------- The all-comments modal ----------
+
+  async function setStatus(item, status) {
+    try {
+      await call(`/api/items/${item.id}`, "PATCH", { status });
+    } catch (x) {
+      alert(x.message);
+    }
+    await reload();
+  }
+
+  function openModal(name) {
+    closeEditor();
+    state.modal = name;
+    renderModal();
+    void reload();
+  }
+
+  function closeModal() {
+    state.modal = null;
+    modalSlot.replaceChildren();
+  }
+
+  function historyItem(item) {
+    const resolved = !isOpen(item);
+    const last = lastResolution(item);
+    const here = item.route.split("?")[0] === location.pathname;
+    const log = (item.history ?? []).map((x) =>
+      h("li", {}, `${x.status === "open" ? "Reopened" : x.status[0].toUpperCase() + x.status.slice(1)} by ${x.by?.name ?? "Unknown"}${x.by?.agent ? " (agent)" : ""} · `, when(x.at)),
+    );
+    return h(
+      "li",
+      { className: resolved ? "resolved" : "" },
+      h("span", { className: "num" }, String(item.number)),
+      h(
+        "div",
+        { className: "body" },
+        h("div", { className: "row", style: { alignItems: "flex-start" } }, h("div", { className: "text" }, item.comment), h("span", { className: `chip ${item.status}` }, last && item.status === "open" ? "reopened" : item.status)),
+        h(
+          "div",
+          { className: "meta" },
+          h("span", {}, `${item.author?.name ?? "Unknown"} · ${item.route}${item.element?.section ? ` › ${item.element.section}` : ""} · `, when(item.createdAt)),
+          resolved
+            ? h("button", { type: "button", className: "link", onClick: () => void setStatus(item, "open") }, "Mark unresolved")
+            : h("button", { type: "button", className: "link", onClick: () => void setStatus(item, "done") }, "Mark done"),
+          here ? null : h("a", { className: "link", href: item.url || item.route }, "Go to page"),
+        ),
+        log.length ? h("ul", { className: "log" }, log) : null,
+      ),
+      h("span", { className: "av", title: `${item.author?.name ?? ""} <${item.author?.email ?? ""}>` }, initials(item.author?.name)),
+    );
+  }
+
+  function renderHistory() {
+    const counts = { all: state.items.length, open: state.items.filter(isOpen).length };
+    counts.resolved = counts.all - counts.open;
+    const items = state.items
+      .filter((i) => state.historyFilter === "all" || (state.historyFilter === "open") === isOpen(i))
+      .sort((a, b) => Date.parse(b.updatedAt ?? b.createdAt) - Date.parse(a.updatedAt ?? a.createdAt));
+    const tab = (key, label) =>
+      h("button", { type: "button", "aria-pressed": String(state.historyFilter === key), onClick: () => ((state.historyFilter = key), renderModal()) }, `${label} (${counts[key]})`);
+    return [
+      h("div", { className: "row" }, h("div", { className: "title" }, "All comments"), h("button", { type: "button", className: "x", title: "Close (Esc)", "aria-label": "Close", onClick: closeModal }, "×")),
+      h("p", { className: "hint" }, "Every comment across the app, newest activity first. Mark a resolved one unresolved to send it back to your agent."),
+      h("div", { className: "tabs" }, tab("all", "All"), tab("open", "Open"), tab("resolved", "Resolved")),
+      items.length ? h("ul", {}, items.map(historyItem)) : h("p", { className: "empty" }, "Nothing here yet."),
+    ];
+  }
+
+  function renderModal() {
+    if (!state.modal) return modalSlot.replaceChildren();
+    const body = renderHistory();
+    modalSlot.replaceChildren(
+      h(
+        "div",
+        { className: "backdrop", onClick: (e) => e.target === e.currentTarget && closeModal() },
+        h("div", { className: "card modal", role: "dialog", "aria-modal": "true" }, body),
+      ),
+    );
   }
 
   // ---------- Feedback mode on and off ----------
@@ -523,7 +643,7 @@
 
   const listeners = {
     mousemove: (e) => {
-      if (state.draft || isUi(e) || !(e.target instanceof Element)) return (highlight.style.display = "none");
+      if (state.draft || state.modal || isUi(e) || !(e.target instanceof Element)) return (highlight.style.display = "none");
       const r = e.target.getBoundingClientRect();
       Object.assign(highlight.style, {
         display: "",
@@ -548,7 +668,8 @@
     },
     keydown: (e) => {
       if (e.key !== "Escape") return;
-      if (state.panelEditing) {
+      if (state.modal) closeModal();
+      else if (state.panelEditing) {
         state.panelEditing = null;
         renderPanel();
       } else if (state.draft) closeEditor();
@@ -579,6 +700,7 @@
       clearInterval(timer);
       removeEventListener("resize", onResize);
       closeEditor();
+      closeModal();
       state.panelEditing = null;
       highlight.style.display = "none";
       overlayHost.remove();

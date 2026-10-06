@@ -58,12 +58,12 @@ export function createHandler(options = {}) {
         send(200, store.add({ ...body, author: await authorOf(req) }));
       } else if (path.startsWith("/api/items/") && (req.method === "PATCH" || req.method === "DELETE")) {
         const id = decodeURIComponent(path.slice("/api/items/".length));
-        const who = (await authorOf(req)).email;
+        const who = await authorOf(req);
         if (req.method === "PATCH") {
           const item = store.update(id, await readJson(req), who);
           item ? send(200, item) : send(404, { error: "not found" });
         } else {
-          store.remove(id, who) ? send(200, { ok: true }) : send(404, { error: "not found" });
+          store.remove(id, who.email) ? send(200, { ok: true }) : send(404, { error: "not found" });
         }
       } else {
         send(404, { error: "not found" });

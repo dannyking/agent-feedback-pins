@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createServer } from "node:http";
 import { parseArgs } from "node:util";
-import { createHandler, DEFAULT_BASE, DEFAULT_DIR, FeedbackStore, scriptTag } from "../src/index.js";
+import { cliActor, createHandler, DEFAULT_BASE, DEFAULT_DIR, FeedbackStore, scriptTag } from "../src/index.js";
 
 const HELP = `agent-feedback-pins: pinned UI feedback for AI agents to act on.
 
@@ -15,7 +15,10 @@ Usage:
   agent-feedback-pins render                                    regenerate FEEDBACK.md
 
 Options:
-  --dir <path>   feedback folder (default ${DEFAULT_DIR})`;
+  --dir <path>   feedback folder (default ${DEFAULT_DIR})
+  --by <name>    who is changing the status, logged in each comment's history
+                 (default: the coding agent, detected from AFP_AGENT, AI_AGENT or
+                 CLAUDECODE, else your git identity)`;
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -23,6 +26,7 @@ const { values, positionals } = parseArgs({
     dir: { type: "string", default: DEFAULT_DIR },
     port: { type: "string", default: "4499" },
     host: { type: "string", default: "127.0.0.1" },
+    by: { type: "string" },
     all: { type: "boolean", default: false },
     json: { type: "boolean", default: false },
     help: { type: "boolean", short: "h", default: false },
@@ -33,8 +37,9 @@ const store = new FeedbackStore(values.dir);
 
 function setStatus(status) {
   if (!args.length) throw new Error(`usage: agent-feedback-pins ${cmd} <n...>`);
+  const by = values.by ? { name: values.by, agent: true } : cliActor();
   for (const n of args) {
-    const item = store.update(n, { status });
+    const item = store.update(n, { status }, by);
     console.log(item ? `#${item.number} ${status}` : `#${n} not found`);
   }
 }

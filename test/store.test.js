@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { createHandler, FeedbackStore, injectHtml } from "../src/index.js";
+import { cliActor, createHandler, FeedbackStore, injectHtml, lastResolution } from "../src/index.js";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "afp-"));
 const jo = { name: "Jo Doe", email: "jo@example.com" };
@@ -34,6 +34,29 @@ test("store adds, renders, edits and enforces authorship", () => {
   assert.throws(() => s.remove(a.id, "sam@example.com"), /only the author/);
   assert.ok(s.remove(a.id, "jo@example.com"));
   assert.match(readFileSync(s.markdown, "utf8"), /0 open, 1 done, 0 dismissed/);
+});
+
+test("status changes are logged with who made them, and reopened comments say so", () => {
+  const s = new FeedbackStore(tmp());
+  const a = s.add({ comment: "Fix the logo", route: "/", author: jo });
+  s.update(a.id, { status: "done" }, { name: "Claude Code", agent: true });
+  s.update(a.id, { status: "done" }, { name: "Claude Code", agent: true }); // no change, not logged
+  const reopened = s.update(a.id, { status: "open" }, jo);
+  assert.deepEqual(
+    reopened.history.map((h) => [h.status, h.by]),
+    [["done", { name: "Claude Code", agent: true }], ["open", { name: "Jo Doe", email: "jo@example.com" }]],
+  );
+  assert.equal(lastResolution(reopened).by.name, "Claude Code");
+  const md = readFileSync(s.markdown, "utf8");
+  assert.match(md, /### #1 \(reopened\) \(Jo Doe\): Fix the logo/);
+  assert.match(md, /- History: done by Claude Code .*; open by Jo Doe/);
+});
+
+test("cliActor names the coding agent", () => {
+  assert.deepEqual(cliActor({ AI_AGENT: "claude-code_2-1-290_agent" }), { name: "Claude Code", agent: true });
+  assert.deepEqual(cliActor({ CLAUDECODE: "1" }), { name: "Claude Code", agent: true });
+  assert.deepEqual(cliActor({ AFP_AGENT: "Aider", CLAUDECODE: "1" }), { name: "Aider", agent: true });
+  assert.equal(cliActor({}).agent, undefined);
 });
 
 test("handler serves the client and the API", async () => {

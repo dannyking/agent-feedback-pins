@@ -23,6 +23,9 @@ To have the skill available in every project, see [Install the skill](#install-t
 - Comments go to `.agent-feedback-pins/feedback.jsonl` (the source of truth) and
   `.agent-feedback-pins/FEEDBACK.md` (a readable version for people and agents).
 - Pins stay on the page; you can edit or delete your own comments and mark any as done.
+- **View all and resolved** in the Feedback panel lists every comment, open and resolved, with a
+  log of who resolved each one and when (which agent, or which person). Mark a resolved comment
+  unresolved to send it back; it shows up in `FEEDBACK.md` as reopened, with its history.
 - Tell your agent "look at my in-app feedback" and it plans, fixes and marks them done.
 
 It is dev-only and built to be removed before shipping: one dev dependency and one
@@ -36,7 +39,9 @@ integration block.
   `/__afp` as Connect-style middleware; `injectHtml()` adds the script tag.
 - `agent-feedback-pins/vite`: a Vite plugin (dev server only).
 - `bin/agent-feedback-pins.js`: a standalone collector for any stack, plus `list`, `done`,
-  `dismiss`, `plan`, `reopen` and `render`.
+  `dismiss`, `plan`, `reopen` and `render`. Status changes are logged in each comment's
+  `history`, with the agent that made them: detected from `AFP_AGENT`, `AI_AGENT` or Claude
+  Code's `CLAUDECODE`, or given with `--by "<agent name>"`; otherwise the git identity.
 - `skill/SKILL.md`: an agent skill that installs it to fit the project's stack, processes the
   feedback, and removes it.
 

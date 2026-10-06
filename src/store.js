@@ -76,19 +76,26 @@ export class FeedbackStore {
     return item;
   }
 
-  /** Change status (anyone) or wording (author only, matched by email). */
-  update(idOrNumber, patch, byEmail) {
+  /**
+   * Change status (anyone) or wording (author only, matched by email). `by` is who is acting:
+   * {name, email?, agent?} (or just an email). Status changes are logged in item.history.
+   */
+  update(idOrNumber, patch, by) {
+    const actor = typeof by === "string" ? { name: by, email: by } : by;
     const all = this.list();
     const item = all.find((f) => f.id === idOrNumber || String(f.number) === String(idOrNumber));
     if (!item) return undefined;
     if (patch.comment !== undefined) {
-      if (!sameAuthor(item, byEmail)) throw httpError(403, "only the author can edit this comment");
+      if (!sameAuthor(item, actor?.email)) throw httpError(403, "only the author can edit this comment");
       const c = str(patch.comment, 4000)?.trim();
       if (!c) throw httpError(400, "comment is required");
       item.comment = c;
     }
     if (patch.status !== undefined) {
       if (!STATUSES.includes(patch.status)) throw httpError(400, `status must be one of ${STATUSES.join(", ")}`);
+      if (patch.status !== item.status) {
+        item.history = [...(item.history ?? []), { status: patch.status, at: new Date().toISOString(), by: cleanActor(actor) }];
+      }
       item.status = patch.status;
     }
     item.updatedAt = new Date().toISOString();
@@ -119,6 +126,19 @@ export class FeedbackStore {
   }
 }
 
+function cleanActor(a) {
+  const name = str(a?.name, 120)?.trim();
+  const email = str(a?.email, 200)?.trim().toLowerCase();
+  return { name: name || email || "Unknown", ...(email ? { email } : {}), ...(a?.agent ? { agent: true } : {}) };
+}
+
+/** The last time this comment was marked done or dismissed, if it was. */
+export function lastResolution(item) {
+  return (item.history ?? []).findLast((h) => h.status === "done" || h.status === "dismissed");
+}
+
+const day = (iso) => String(iso).slice(0, 16).replace("T", " ");
+
 function sameAuthor(item, byEmail) {
   const a = (item.author?.email || "").toLowerCase();
   return !a || a === String(byEmail || "").toLowerCase();
@@ -147,7 +167,9 @@ export function renderMarkdown(items) {
     lines.push(`## ${route}${list[0]?.pageTitle ? ` (${list[0].pageTitle})` : ""}`, "");
     for (const i of list) {
       const first = i.comment.split("\n")[0];
-      lines.push(`### #${i.number}${i.status === "planned" ? " (planned)" : ""} (${i.author?.name ?? "Unknown"}): ${first}`);
+      const resolved = lastResolution(i);
+      const tag = i.status === "planned" ? " (planned)" : resolved ? " (reopened)" : "";
+      lines.push(`### #${i.number}${tag} (${i.author?.name ?? "Unknown"}): ${first}`);
       if (i.comment.includes("\n")) lines.push("", i.comment);
       lines.push("");
       const e = i.element;
@@ -162,7 +184,13 @@ export function renderMarkdown(items) {
         lines.push("- Whole page");
       }
       const who = i.author?.email ? `${i.author.name} <${i.author.email}>` : (i.author?.name ?? "Unknown");
-      lines.push(`- Left ${String(i.createdAt).slice(0, 16).replace("T", " ")} UTC by ${who}`, "");
+      lines.push(`- Left ${day(i.createdAt)} UTC by ${who}`);
+      if (resolved) {
+        // A reopened comment: the earlier fix didn't satisfy the reviewer.
+        const log = i.history.map((h) => `${h.status} by ${h.by?.name ?? "Unknown"} ${day(h.at)} UTC`);
+        lines.push(`- History: ${log.join("; ")}`);
+      }
+      lines.push("");
     }
   }
   return lines.join("\n");

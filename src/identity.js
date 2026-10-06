@@ -24,3 +24,15 @@ export function gitAuthor(cwd = process.cwd()) {
   cached = { name: name || email || fallback, email };
   return cached;
 }
+
+const AGENTS = { "claude-code": "Claude Code", codex: "Codex", opencode: "OpenCode", pi: "Pi", cursor: "Cursor", "gemini-cli": "Gemini CLI" };
+
+/**
+ * Who is running the CLI, for the history of a comment: the coding agent if we can tell (from
+ * AFP_AGENT, the AI_AGENT convention or Claude Code's CLAUDECODE), else the git identity.
+ */
+export function cliActor(env = process.env) {
+  const raw = env.AFP_AGENT || env.AI_AGENT?.split("_")[0] || (env.CLAUDECODE ? "claude-code" : "");
+  if (raw) return { name: AGENTS[raw.toLowerCase()] ?? raw, agent: true };
+  return gitAuthor();
+}
