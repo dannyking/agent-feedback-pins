@@ -5,15 +5,32 @@
   "description": "Leave pinned UI feedback on any element of a web app during development, saved to files an AI agent can batch into a plan. Dev-only and trivial to remove.",
   "license": "UNLICENSED",
   "type": "module",
-  "bin": { "agent-feedback-pins": "./bin/agent-feedback-pins.js" },
+  "bin": {
+    "agent-feedback-pins": "./bin/agent-feedback-pins.js"
+  },
   "exports": {
-    ".": "./src/index.js",
-    "./vite": "./src/vite.js",
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./vite": {
+      "types": "./src/vite.d.ts",
+      "default": "./src/vite.js"
+    },
     "./client": "./client/agent-feedback-pins.js"
   },
-  "files": ["src", "client", "bin", "skill", "README.md"],
-  "engines": { "node": ">=18" },
+  "files": [
+    "src",
+    "client",
+    "bin",
+    "skill",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "test": "node --test test/*.test.js"
-  }
+  },
+  "types": "./src/index.d.ts"
 }
