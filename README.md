@@ -1,7 +1,11 @@
 # Agent feedback pins
 
-Leave pinned comments on any element of a web app while you develop it, then have your AI agent
-work through them in one batch.
+While you develop any web app, add a temporary Feedback button so you can pin comments to page
+elements for your AI agents to act on. It's inspired by
+[plannotator-tui](https://github.com/plannotator/plannotator-tui) and Claude's design mode. Your
+comments are saved to a Markdown file in the project. Your agent picks them up and works through
+them when you use the included skill, or when you ask it to resolve the in-app comments you left.
+It's easy to remove when you're ready to ship.
 
 - Click **Feedback** in the app, click anything, type what should change.
 - Each comment is saved with the page, the element's selector, its nearest heading and text, its
