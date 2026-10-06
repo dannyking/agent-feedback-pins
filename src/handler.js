@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gitAuthor } from "./identity.js";
 import { FeedbackStore } from "./store.js";
@@ -24,7 +24,7 @@ export function createHandler(options = {}) {
   const dir = resolve(options.dir ?? DEFAULT_DIR);
   const base = (options.base ?? DEFAULT_BASE).replace(/\/$/, "");
   const store = new FeedbackStore(dir);
-  const shown = relative(process.cwd(), join(dir, "FEEDBACK.md")) || "FEEDBACK.md";
+  const shown = `${basename(dir)}/FEEDBACK.md`;
   const authorOf = async (req) => (options.author ? await options.author(req) : undefined) ?? gitAuthor();
 
   async function handle(req, res, next) {
