@@ -130,7 +130,7 @@ node --test test/*.test.js
 If a user asks you to add this repo to their project:
 
 1. Read [`skill/SKILL.md`](skill/SKILL.md)
-   (raw: https://raw.githubusercontent.com/dannyking/agent-feedback-pins/master/skill/SKILL.md)
+   (raw: https://raw.githubusercontent.com/dannyking/agent-feedback-pins/main/skill/SKILL.md)
    and follow its **Install** section. Look at the project's stack first and pick the matching
    integration; keep it dev-only and in as few places as possible.
 2. Install the package as a dev dependency from GitHub
