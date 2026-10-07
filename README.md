@@ -108,7 +108,8 @@ The gear in the Feedback panel opens settings, saved to `.agent-feedback-pins/se
   it). On pages without that element it floats. Or hidden, so only the shortcut opens Feedback
   mode.
 - **Panel position**: any corner. The arrow in its header collapses it to one line, for cramped
-  layouts.
+  layouts. Its list shows open comments from all pages (this page's first) or just this page,
+  switched in the panel itself.
 - **Keyboard shortcut** that toggles Feedback mode: record your own, or turn it off. It needs
   Ctrl, Alt or ⌘ so it can't fire while you type.
 - **Pins**: hide the numbered pins on the page (the panel still lists the comments).

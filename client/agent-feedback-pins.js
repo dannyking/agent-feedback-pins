@@ -63,7 +63,7 @@
     showPins: true,
     name: "", // "" keeps the git name
     askForNotes: true,
-    panel: { corner: "bottom-right", collapsed: false },
+    panel: { corner: "bottom-right", collapsed: false, scope: "all" }, // scope: all | page
   };
 
   function prefs() {
@@ -430,7 +430,8 @@
 
   const globalStyle = h("style", { "data-agent-feedback-pins": "" }, GLOBAL_CSS);
 
-  const pageItems = () => state.items.filter((i) => i.route.split("?")[0] === location.pathname && isOpen(i));
+  const onThisPage = (i) => i.route.split("?")[0] === location.pathname;
+  const pageItems = () => state.items.filter((i) => onThisPage(i) && isOpen(i));
 
   function pinPosition(item) {
     if (!item.element) return null;
@@ -620,7 +621,8 @@
         h(
           "div",
           { className: "meta" },
-          h("span", {}, `${item.author?.name ?? "Unknown"} · ${item.element?.section ?? "Whole page"}`),
+          h("span", {}, `${item.author?.name ?? "Unknown"} · ${onThisPage(item) ? "" : `${item.route} › `}${item.element?.section ?? "Whole page"}`),
+          onThisPage(item) ? null : h("a", { className: "link", href: item.url || item.route }, "Go to page"),
           mine(item)
             ? [
                 h("button", { type: "button", className: "link", onClick: () => ((state.panelEditing = item.id), renderPanel()) }, "Edit"),
@@ -643,14 +645,17 @@
 
   function renderPanel() {
     if (!state.active) return panelSlot.replaceChildren();
-    const items = pageItems();
-    const allOpen = state.items.filter(isOpen).length;
-    const { collapsed } = prefs().panel;
+    const here = pageItems();
+    const open = state.items.filter(isOpen);
+    const allOpen = open.length;
+    const { collapsed, scope } = prefs().panel;
+    // This page's comments first, then the rest of the app's.
+    const items = scope === "page" ? here : [...here, ...open.filter((i) => !onThisPage(i))];
     const toggle = () => void saveSettings((s) => (s.panel = { ...s.panel, collapsed: !collapsed }));
     const header = h(
       "div",
       { className: "row" },
-      h("div", { className: "title" }, "Feedback mode", collapsed && items.length ? h("span", { className: "count", title: "Open comments on this page" }, String(items.length)) : null),
+      h("div", { className: "title" }, "Feedback mode", collapsed && items.length ? h("span", { className: "count", title: scope === "page" ? "Open comments on this page" : "Open comments across the app" }, String(items.length)) : null),
       h(
         "div",
         { className: "head-actions" },
@@ -670,6 +675,18 @@
         header,
         h("p", { className: "hint" }, "Click any part of the page to comment on it. Comments are saved for your next planning session."),
         h("button", { type: "button", className: "whole", onClick: () => openEditor({ element: null, at: { x: innerWidth - 380, y: innerHeight - 320 } }) }, "Comment on this whole page"),
+        allOpen
+          ? h(
+              "div",
+              { className: "tabs" },
+              [
+                ["all", `All pages (${allOpen})`],
+                ["page", `This page (${here.length})`],
+              ].map(([value, label]) =>
+                h("button", { type: "button", "aria-pressed": String(scope === value), onClick: () => void saveSettings((s) => (s.panel = { ...s.panel, scope: value })) }, label),
+              ),
+            )
+          : null,
         items.length ? h("ul", {}, items.map(panelItem)) : null,
         h(
           "div",

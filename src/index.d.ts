@@ -41,8 +41,8 @@ export interface Settings {
   name?: string;
   /** Ask agents for a note on each resolution. Default true. */
   askForNotes?: boolean;
-  /** Where the Feedback panel sits (default bottom-right), and whether it's collapsed. */
-  panel?: { corner?: "bottom-left" | "bottom-right" | "top-left" | "top-right"; collapsed?: boolean };
+  /** Where the Feedback panel sits (default bottom-right), whether it's collapsed, and whether it lists all pages' comments (default) or this page's. */
+  panel?: { corner?: "bottom-left" | "bottom-right" | "top-left" | "top-right"; collapsed?: boolean; scope?: "all" | "page" };
 }
 
 export interface HandlerOptions {

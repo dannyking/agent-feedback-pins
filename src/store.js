@@ -177,6 +177,7 @@ export function cleanSettings(s) {
       panel: {
         corner: one(s?.panel?.corner, SETTINGS.corners),
         collapsed: typeof s?.panel?.collapsed === "boolean" ? s.panel.collapsed : undefined,
+        scope: one(s?.panel?.scope, ["all", "page"]),
       },
     }),
   );
