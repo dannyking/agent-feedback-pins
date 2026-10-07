@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createServer } from "node:http";
 import { parseArgs } from "node:util";
-import { cliActor, createHandler, DEFAULT_BASE, DEFAULT_DIR, FeedbackStore, scriptTag } from "../src/index.js";
+import { cliActor, createHandler, DEFAULT_BASE, DEFAULT_DIR, FeedbackStore, scriptTag, wantsNotes } from "../src/index.js";
 
 const HELP = `agent-feedback-pins: pinned UI feedback for AI agents to act on.
 
@@ -16,6 +16,9 @@ Usage:
 
 Options:
   --dir <path>   feedback folder (default ${DEFAULT_DIR})
+  --note <text>  what you changed, or why you didn't; shown in the app's history.
+                 Required for done and dismiss unless notes are turned off in settings
+                 (one note per command, so resolve comments one at a time)
   --by <name>    who is changing the status, logged in each comment's history
                  (default: the coding agent, detected from AFP_AGENT, AI_AGENT or
                  CLAUDECODE, else your git identity)`;
@@ -27,6 +30,7 @@ const { values, positionals } = parseArgs({
     port: { type: "string", default: "4499" },
     host: { type: "string", default: "127.0.0.1" },
     by: { type: "string" },
+    note: { type: "string" },
     all: { type: "boolean", default: false },
     json: { type: "boolean", default: false },
     help: { type: "boolean", short: "h", default: false },
@@ -37,9 +41,16 @@ const store = new FeedbackStore(values.dir);
 
 function setStatus(status) {
   if (!args.length) throw new Error(`usage: agent-feedback-pins ${cmd} <n...>`);
+  const resolving = status === "done" || status === "dismissed";
+  if (resolving && values.note === undefined && wantsNotes(store.getSettings()))
+    throw new Error(
+      `Add a short note on what you changed (or why not), shown to the reviewer in the app:\n` +
+        `  agent-feedback-pins ${cmd} ${args[0]} --note "..."\n` +
+        `(Pass --note "" to skip; turn notes off in the app's settings.)`,
+    );
   const by = values.by ? { name: values.by, agent: true } : cliActor();
   for (const n of args) {
-    const item = store.update(n, { status }, by);
+    const item = store.update(n, { status, note: values.note }, by);
     console.log(item ? `#${item.number} ${status}` : `#${n} not found`);
   }
 }

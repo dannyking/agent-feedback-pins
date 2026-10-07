@@ -25,7 +25,13 @@ export function createHandler(options = {}) {
   const base = (options.base ?? DEFAULT_BASE).replace(/\/$/, "");
   const store = new FeedbackStore(dir);
   const shown = `${basename(dir)}/FEEDBACK.md`;
-  const authorOf = async (req) => (options.author ? await options.author(req) : undefined) ?? gitAuthor();
+  // The app's signed-in person, else the git identity (renamed if they set a name in settings).
+  const appAuthor = async (req) => (options.author ? await options.author(req) : undefined);
+  const localAuthor = () => {
+    const name = store.getSettings().name;
+    return name ? { ...gitAuthor(), name } : gitAuthor();
+  };
+  const authorOf = async (req) => (await appAuthor(req)) ?? localAuthor();
 
   async function handle(req, res, next) {
     const url = new URL(req.url ?? "/", "http://x");
@@ -50,7 +56,9 @@ export function createHandler(options = {}) {
       if (path === "/client.js" && req.method === "GET") {
         send(200, readFileSync(CLIENT, "utf8"), "text/javascript; charset=utf-8");
       } else if (path === "/api/me" && req.method === "GET") {
-        send(200, { author: await authorOf(req), file: shown });
+        const fromApp = await appAuthor(req);
+        // nameable: the name comes from git, so the settings modal may override it.
+        send(200, { author: fromApp ?? localAuthor(), file: shown, nameable: !fromApp, gitName: gitAuthor().name });
       } else if (path === "/api/settings" && req.method === "GET") {
         send(200, store.getSettings());
       } else if (path === "/api/settings" && req.method === "PUT") {

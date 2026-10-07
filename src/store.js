@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 /** Statuses a comment moves through. */
@@ -10,7 +10,7 @@ export const SETTINGS = {
   modes: ["light", "dark", "auto"],
   icons: ["chat", "pin", "pencil", "flag", "megaphone", "eye"],
   shows: ["both", "icon", "text"],
-  positions: ["default", "floating", "custom"],
+  positions: ["default", "floating", "custom", "hidden"],
   corners: ["bottom-left", "bottom-right", "top-left", "top-right"],
   places: ["before", "after", "inside"],
 };
@@ -62,6 +62,7 @@ export class FeedbackStore {
     const settings = cleanSettings(input);
     this.ensureDir();
     writeFileSync(this.settingsFile, JSON.stringify(settings, null, 2) + "\n");
+    if (existsSync(this.jsonl)) this.render(); // FEEDBACK.md says whether notes are wanted
     return settings;
   }
 
@@ -105,7 +106,8 @@ export class FeedbackStore {
 
   /**
    * Change status (anyone) or wording (author only, matched by email). `by` is who is acting:
-   * {name, email?, agent?} (or just an email). Status changes are logged in item.history.
+   * {name, email?, agent?} (or just an email). Status changes are logged in item.history,
+   * with patch.note (what was done, or why not) when given.
    */
   update(idOrNumber, patch, by) {
     const actor = typeof by === "string" ? { name: by, email: by } : by;
@@ -120,8 +122,9 @@ export class FeedbackStore {
     }
     if (patch.status !== undefined) {
       if (!STATUSES.includes(patch.status)) throw httpError(400, `status must be one of ${STATUSES.join(", ")}`);
-      if (patch.status !== item.status) {
-        item.history = [...(item.history ?? []), { status: patch.status, at: new Date().toISOString(), by: cleanActor(actor) }];
+      const note = str(patch.note, 2000)?.trim();
+      if (patch.status !== item.status || note) {
+        item.history = [...(item.history ?? []), { status: patch.status, at: new Date().toISOString(), by: cleanActor(actor), ...(note ? { note } : {}) }];
       }
       item.status = patch.status;
     }
@@ -144,7 +147,7 @@ export class FeedbackStore {
     const tmp = `${this.jsonl}.tmp`;
     writeFileSync(tmp, items.map((i) => JSON.stringify(i)).join("\n") + (items.length ? "\n" : ""));
     renameSync(tmp, this.jsonl);
-    writeFileSync(this.markdown, renderMarkdown(items));
+    writeFileSync(this.markdown, renderMarkdown(items, this.getSettings()));
   }
 
   /** Rewrite FEEDBACK.md from feedback.jsonl (after hand edits or upgrades). */
@@ -169,6 +172,12 @@ export function cleanSettings(s) {
       },
       shortcut: str(s?.shortcut, 40),
       showPins: typeof s?.showPins === "boolean" ? s.showPins : undefined,
+      name: str(s?.name, 120)?.trim() || undefined,
+      askForNotes: typeof s?.askForNotes === "boolean" ? s.askForNotes : undefined,
+      panel: {
+        corner: one(s?.panel?.corner, SETTINGS.corners),
+        collapsed: typeof s?.panel?.collapsed === "boolean" ? s.panel.collapsed : undefined,
+      },
     }),
   );
 }
@@ -197,7 +206,10 @@ export function httpError(status, message) {
 
 const oneLine = (s) => s.replace(/\s+/g, " ").trim();
 
-export function renderMarkdown(items) {
+/** Whether agents should explain each resolution (on unless turned off in settings). */
+export const wantsNotes = (settings) => settings?.askForNotes !== false;
+
+export function renderMarkdown(items, settings = {}) {
   const open = items.filter((i) => i.status === "open" || i.status === "planned");
   const byRoute = new Map();
   for (const i of open) byRoute.set(i.route, [...(byRoute.get(i.route) ?? []), i]);
@@ -210,6 +222,12 @@ export function renderMarkdown(items) {
     `${open.length} open, ${count("done")} done, ${count("dismissed")} dismissed.${authors.length ? ` From: ${authors.join(", ")}.` : ""}`,
     "",
   ];
+  if (wantsNotes(settings) && open.length) {
+    lines.push(
+      'When you resolve a comment, say what you changed (or why you didn\'t) in a short note: `npx agent-feedback-pins done 3 --note "Made the heading 32px"`. The reviewer sees it in the app.',
+      "",
+    );
+  }
   for (const [route, list] of byRoute) {
     lines.push(`## ${route}${list[0]?.pageTitle ? ` (${list[0].pageTitle})` : ""}`, "");
     for (const i of list) {
@@ -234,7 +252,7 @@ export function renderMarkdown(items) {
       lines.push(`- Left ${day(i.createdAt)} UTC by ${who}`);
       if (resolved) {
         // A reopened comment: the earlier fix didn't satisfy the reviewer.
-        const log = i.history.map((h) => `${h.status} by ${h.by?.name ?? "Unknown"} ${day(h.at)} UTC`);
+        const log = i.history.map((h) => `${h.status} by ${h.by?.name ?? "Unknown"} ${day(h.at)} UTC${h.note ? ` ("${oneLine(h.note)}")` : ""}`);
         lines.push(`- History: ${log.join("; ")}`);
       }
       lines.push("");

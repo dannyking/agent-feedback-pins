@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -50,6 +51,27 @@ test("status changes are logged with who made them, and reopened comments say so
   const md = readFileSync(s.markdown, "utf8");
   assert.match(md, /### #1 \(reopened\) \(Jo Doe\): Fix the logo/);
   assert.match(md, /- History: done by Claude Code .*; open by Jo Doe/);
+  assert.match(md, /When you resolve a comment, say what you changed/);
+  s.setSettings({ askForNotes: false });
+  assert.doesNotMatch(readFileSync(s.markdown, "utf8"), /When you resolve a comment/); // re-rendered
+  const noted = s.update(a.id, { status: "done", note: "Logo is now SVG" }, { name: "Claude Code", agent: true });
+  assert.equal(noted.history.at(-1).note, "Logo is now SVG");
+  const again = s.update(a.id, { status: "done", note: "Also fixed its alt text" }, { name: "Claude Code", agent: true });
+  assert.equal(again.history.at(-1).note, "Also fixed its alt text"); // a note is logged even without a change
+});
+
+test("the CLI asks for a resolution note unless notes are off", () => {
+  const dir = tmp();
+  const s = new FeedbackStore(dir);
+  s.add({ comment: "One", route: "/", author: jo });
+  const cli = (...args) => execFileSync("node", ["bin/agent-feedback-pins.js", ...args, "--dir", dir], { encoding: "utf8", stdio: "pipe", env: { ...process.env, AFP_AGENT: "Test" } });
+  assert.throws(() => cli("done", "1"), /Add a short note/);
+  assert.match(cli("done", "1", "--note", "Fixed it"), /#1 done/);
+  const { by, note } = s.list()[0].history.at(-1);
+  assert.deepEqual([by, note], [{ name: "Test", agent: true }, "Fixed it"]);
+  s.setSettings({ askForNotes: false });
+  assert.match(cli("reopen", "1"), /#1 open/);
+  assert.match(cli("dismiss", "1"), /#1 dismissed/);
 });
 
 test("cliActor names the coding agent", () => {
@@ -86,9 +108,16 @@ test("handler serves the client and the API", async () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ theme: { accent: "#2563eb", mode: "sepia" }, button: { show: "icon" }, shortcut: "Ctrl+Alt+K", showPins: false, extra: 1 }),
     });
-    const saved = { theme: { accent: "#2563eb" }, button: { show: "icon" }, position: {}, shortcut: "Ctrl+Alt+K", showPins: false };
+    const saved = { theme: { accent: "#2563eb" }, button: { show: "icon" }, position: {}, shortcut: "Ctrl+Alt+K", showPins: false, panel: {} };
     assert.deepEqual(await put.json(), saved); // unknown values dropped
     assert.deepEqual(await (await fetch(`${base}/__afp/api/settings`)).json(), saved);
+    // A display name replaces the git name, but never the app's own signed-in person.
+    await fetch(`${base}/__afp/api/settings`, { method: "PUT", body: JSON.stringify({ name: "Dee" }) });
+    const local = await (await fetch(`${base}/__afp/api/me`)).json();
+    assert.equal(local.author.name, "Dee");
+    assert.equal(local.nameable, true);
+    const signedIn = await (await fetch(`${base}/__afp/api/me`, { headers: { "x-user": "jo" } })).json();
+    assert.deepEqual([signedIn.author, signedIn.nameable], [jo, false]);
   } finally {
     server.close();
   }

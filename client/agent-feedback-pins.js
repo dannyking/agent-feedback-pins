@@ -61,6 +61,9 @@
     position: { mode: "default", corner: "bottom-left", selector: "", place: "before" },
     shortcut: "Alt+Shift+F",
     showPins: true,
+    name: "", // "" keeps the git name
+    askForNotes: true,
+    panel: { corner: "bottom-right", collapsed: false },
   };
 
   function prefs() {
@@ -71,6 +74,9 @@
       position: { ...DEFAULTS.position, ...s.position },
       shortcut: s.shortcut ?? DEFAULTS.shortcut,
       showPins: s.showPins ?? DEFAULTS.showPins,
+      name: s.name ?? DEFAULTS.name,
+      askForNotes: s.askForNotes ?? DEFAULTS.askForNotes,
+      panel: { ...DEFAULTS.panel, ...s.panel },
     };
   }
 
@@ -293,7 +299,9 @@
     .log { margin: 4px 0 0; padding: 0; list-style: none; display: block; max-height: none; font-size: 10px; color: var(--di); }
     .log li { display: list-item; background: none; padding: 0; border-radius: 0; }
     .empty { margin-top: 16px; font-size: 12px; color: var(--mu); }
-    :host([data-corner="bottom-right"]) .panel { bottom: 64px; }
+    .panel.collapsed { padding: 10px 16px; }
+    .count { margin-left: 6px; border-radius: 999px; background: ${mix("--a", 20)}; padding: 0 6px; font-size: 10px; font-weight: 700; color: var(--at); }
+    .note { margin: 1px 0 3px 8px; padding-left: 6px; border-left: 2px solid var(--l); color: var(--mu); white-space: pre-wrap; }
     .head-actions { display: flex; align-items: center; gap: 12px; }
     .icon-btn { display: flex; color: var(--mu); }
     .icon-btn:hover { color: var(--fg); }
@@ -336,6 +344,8 @@
     flag: '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/>',
     megaphone: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
     eye: '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
+    collapse: '<path d="m6 9 6 6 6-6"/>',
+    expand: '<path d="m18 15-6-6-6 6"/>',
     gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
   };
 
@@ -375,6 +385,12 @@
     let place = attr("data-mount-before") ? "before" : "inside";
     if (position.mode === "floating") selector = undefined;
     if (position.mode === "custom" && position.selector) [selector, place] = [position.selector, position.place];
+    if (position.mode === "hidden") {
+      // Shortcut only. Feedback mode stays on if it was on: its panel has the way out.
+      buttonHost.remove();
+      buttonHost.removeAttribute("data-floating");
+      return;
+    }
     let target = null;
     try {
       target = selector ? document.querySelector(selector) : null;
@@ -383,7 +399,6 @@
     }
     if (target) {
       buttonHost.removeAttribute("data-floating");
-      overlayHost.removeAttribute("data-corner");
       if (place === "before" && buttonHost.nextElementSibling !== target) target.before(buttonHost);
       if (place === "after" && buttonHost.previousElementSibling !== target) target.after(buttonHost);
       if (place === "inside" && buttonHost.parentElement !== target) target.append(buttonHost);
@@ -393,9 +408,10 @@
     } else {
       // No dock (or not rendered yet, or the page has none): float in the corner.
       const corner = position.mode === "floating" ? position.corner : "bottom-left";
-      if (buttonHost.getAttribute("data-floating") !== corner) buttonHost.setAttribute("data-floating", corner);
-      // The panel moves up when the button would sit under it.
-      if (overlayHost.getAttribute("data-corner") !== corner) overlayHost.setAttribute("data-corner", corner);
+      if (buttonHost.getAttribute("data-floating") !== corner) {
+        buttonHost.setAttribute("data-floating", corner);
+        if (state.active) renderPanel(); // it keeps clear of the button's corner
+      }
       if (buttonHost.parentElement !== document.body) document.body.append(buttonHost);
     }
   }
@@ -617,25 +633,41 @@
     );
   }
 
+  /** The panel's corner, nudged clear of a floating button in the same one. */
+  function panelPlace() {
+    const { corner, collapsed } = prefs().panel;
+    const [v, x] = corner.split("-");
+    const gap = buttonHost.isConnected && buttonHost.getAttribute("data-floating") === corner ? 64 : 16;
+    return { top: "auto", bottom: "auto", left: "auto", right: "auto", [v]: `${gap}px`, [x]: "16px", ...(collapsed ? { width: "auto" } : {}) };
+  }
+
   function renderPanel() {
     if (!state.active) return panelSlot.replaceChildren();
     const items = pageItems();
     const allOpen = state.items.filter(isOpen).length;
+    const { collapsed } = prefs().panel;
+    const toggle = () => void saveSettings((s) => (s.panel = { ...s.panel, collapsed: !collapsed }));
+    const header = h(
+      "div",
+      { className: "row" },
+      h("div", { className: "title" }, "Feedback mode", collapsed && items.length ? h("span", { className: "count", title: "Open comments on this page" }, String(items.length)) : null),
+      h(
+        "div",
+        { className: "head-actions" },
+        h("button", { type: "button", className: "icon-btn", title: "Settings", "aria-label": "Settings", onClick: () => openModal("settings") }, icon("gear", 16)),
+        h("button", { type: "button", className: "icon-btn", title: collapsed ? "Expand" : "Collapse", "aria-label": collapsed ? "Expand panel" : "Collapse panel", "aria-expanded": String(!collapsed), onClick: toggle }, icon(collapsed ? "expand" : "collapse", 16)),
+        h("button", { type: "button", className: "quiet", style: { fontSize: "12px" }, onClick: () => setActive(false) }, "Exit (Esc)"),
+      ),
+    );
+    if (collapsed) {
+      panelSlot.replaceChildren(h("div", { className: "card panel collapsed", style: panelPlace() }, header));
+      return renderPins();
+    }
     panelSlot.replaceChildren(
       h(
         "div",
-        { className: "card panel" },
-        h(
-          "div",
-          { className: "row" },
-          h("div", { className: "title" }, "Feedback mode"),
-          h(
-            "div",
-            { className: "head-actions" },
-            h("button", { type: "button", className: "icon-btn", title: "Settings", "aria-label": "Settings", onClick: () => openModal("settings") }, icon("gear", 16)),
-            h("button", { type: "button", className: "quiet", style: { fontSize: "12px" }, onClick: () => setActive(false) }, "Exit (Esc)"),
-          ),
-        ),
+        { className: "card panel", style: panelPlace() },
+        header,
         h("p", { className: "hint" }, "Click any part of the page to comment on it. Comments are saved for your next planning session."),
         h("button", { type: "button", className: "whole", onClick: () => openEditor({ element: null, at: { x: innerWidth - 380, y: innerHeight - 320 } }) }, "Comment on this whole page"),
         items.length ? h("ul", {}, items.map(panelItem)) : null,
@@ -680,7 +712,13 @@
     const last = lastResolution(item);
     const here = item.route.split("?")[0] === location.pathname;
     const log = (item.history ?? []).map((x) =>
-      h("li", {}, `${x.status === "open" ? "Reopened" : x.status[0].toUpperCase() + x.status.slice(1)} by ${x.by?.name ?? "Unknown"}${x.by?.agent ? " (agent)" : ""} · `, when(x.at)),
+      h(
+        "li",
+        {},
+        `${x.status === "open" ? "Reopened" : x.status[0].toUpperCase() + x.status.slice(1)} by ${x.by?.name ?? "Unknown"}${x.by?.agent ? " (agent)" : ""} · `,
+        when(x.at),
+        x.note ? h("div", { className: "note" }, x.note) : null,
+      ),
     );
     return h(
       "li",
@@ -888,8 +926,7 @@
     const icons = h(
       "div",
       { className: "tabs icons" },
-      Object.keys(ICONS)
-        .filter((n) => n !== "gear")
+      ["chat", "pin", "pencil", "flag", "megaphone", "eye"]
         .map((n) =>
           h("button", { type: "button", title: n, "aria-label": n, "aria-pressed": String(p.button.icon === n), onClick: () => void saveSettings((s) => set("button")(s, { icon: n })) }, icon(n, 16)),
         ),
@@ -901,10 +938,12 @@
           ["default", docked ? "Where the app put it" : "Default (bottom-left)"],
           ["floating", "Floating"],
           ["custom", "Pick a spot"],
+          ["hidden", "Hidden"],
         ],
         p.position.mode,
         (s, mode) => {
           set("position")(s, { mode });
+          if (mode === "hidden" && !p.shortcut) delete s.shortcut; // keep a way in
           if (mode === "custom" && !p.position.selector) queueMicrotask(startPicking);
         },
       ),
@@ -921,6 +960,7 @@
             p.position.selector ? h("p", { className: "hint" }, "Next to ", h("code", {}, p.position.selector), ". It floats on pages without that element.") : null,
           )
         : null,
+      p.position.mode === "hidden" ? h("p", { className: "hint" }, `No button: press ${keyLabel(p.shortcut || DEFAULTS.shortcut)} to open Feedback mode.`) : null,
     ];
 
     const shortcut = h(
@@ -928,7 +968,9 @@
       { className: "row", style: { justifyContent: "flex-start", gap: "12px" } },
       h("kbd", {}, state.recording ? "Press keys…" : p.shortcut ? keyLabel(p.shortcut) : "Off"),
       h("button", { type: "button", className: "link quiet", style: { fontSize: "12px" }, onClick: () => ((state.recording = !state.recording), (settingsError = ""), renderModal()) }, state.recording ? "Cancel" : "Change"),
-      p.shortcut ? h("button", { type: "button", className: "link quiet", style: { fontSize: "12px" }, onClick: () => void saveSettings((s) => (s.shortcut = "")) }, "Turn off") : null,
+      p.shortcut && p.position.mode !== "hidden"
+        ? h("button", { type: "button", className: "link quiet", style: { fontSize: "12px" }, onClick: () => void saveSettings((s) => (s.shortcut = "")) }, "Turn off")
+        : null,
       p.shortcut !== DEFAULTS.shortcut ? h("button", { type: "button", className: "link quiet", style: { fontSize: "12px" }, onClick: () => void saveSettings((s) => delete s.shortcut) }, `Reset to ${keyLabel(DEFAULTS.shortcut)}`) : null,
     );
 
@@ -943,6 +985,11 @@
         field("Button icon", icons),
         field("Show", seg([["both", "Icon and label"], ["icon", "Icon only"], ["text", "Label only"]], p.button.show, (s, show) => set("button")(s, { show }))),
         field("Button position", ...position),
+        field(
+          "Panel position",
+          seg([["bottom-right", "Bottom right"], ["bottom-left", "Bottom left"], ["top-right", "Top right"], ["top-left", "Top left"]], p.panel.corner, (s, corner) => set("panel")(s, { corner })),
+          h("p", { className: "hint" }, "Collapse it to just its header with the arrow at its top."),
+        ),
         field("Keyboard shortcut for Feedback mode", shortcut),
         field(
           "Pins",
@@ -952,6 +999,32 @@
             h("input", { type: "checkbox", checked: p.showPins, onChange: (e) => void saveSettings((s) => (s.showPins = e.target.checked)) }),
             "Show numbered pins on open comments",
           ),
+        ),
+        state.me.nameable
+          ? field(
+              "Your name on comments",
+              h("input", {
+                type: "text",
+                value: p.name,
+                maxLength: 120,
+                placeholder: state.me.gitName || "Your git name",
+                onChange: (e) =>
+                  void saveSettings((s) => (s.name = e.target.value.trim() || undefined)).then(() =>
+                    call("/api/me").then((me) => (state.me = me)),
+                  ),
+              }),
+              h("p", { className: "hint" }, "Used on new comments and in the history. Empty uses your git name."),
+            )
+          : null,
+        field(
+          "Agent notes",
+          h(
+            "label",
+            { className: "check" },
+            h("input", { type: "checkbox", checked: p.askForNotes, onChange: (e) => void saveSettings((s) => (s.askForNotes = e.target.checked)) }),
+            "Ask agents for a note on what they changed when they resolve a comment",
+          ),
+          h("p", { className: "hint" }, "Notes show in each comment's history under View all and resolved."),
         ),
         settingsError ? h("div", { className: "err" }, settingsError) : null,
         h(

@@ -24,7 +24,7 @@ To have the skill available in every project, see [Install the skill](#install-t
   `.agent-feedback-pins/FEEDBACK.md` (a readable version for people and agents).
 - Pins stay on the page; you can edit or delete your own comments and mark any as done.
 - **View all and resolved** in the Feedback panel lists every comment, open and resolved, with a
-  log of who resolved each one and when (which agent, or which person). Mark a resolved comment
+  log of who resolved each one, when, and the agent's note on what it changed. Mark a resolved comment
   unresolved to send it back; it shows up in `FEEDBACK.md` as reopened, with its history.
 - **Alt+Shift+F** (⌥⇧F on a Mac) toggles Feedback mode from anywhere in the app.
 - Tell your agent "look at my in-app feedback" and it plans, fixes and marks them done.
@@ -42,7 +42,8 @@ integration block.
 - `bin/agent-feedback-pins.js`: a standalone collector for any stack, plus `list`, `done`,
   `dismiss`, `plan`, `reopen` and `render`. Status changes are logged in each comment's
   `history`, with the agent that made them: detected from `AFP_AGENT`, `AI_AGENT` or Claude
-  Code's `CLAUDECODE`, or given with `--by "<agent name>"`; otherwise the git identity.
+  Code's `CLAUDECODE`, or given with `--by "<agent name>"`; otherwise the git identity. `--note`
+  records what was changed; `done` and `dismiss` require it while agent notes are on.
 - `skill/SKILL.md`: an agent skill that installs it to fit the project's stack, processes the
   feedback, and removes it.
 
@@ -104,10 +105,17 @@ The gear in the Feedback panel opens settings, saved to `.agent-feedback-pins/se
 - **Button label and icon**, shown as icon and label, icon only, or label only.
 - **Button position**: where the app put it (the script attributes), floating in a corner of
   your choice, or a spot you pick by clicking an element on the page (before, after or inside
-  it). On pages without that element it floats.
+  it). On pages without that element it floats. Or hidden, so only the shortcut opens Feedback
+  mode.
+- **Panel position**: any corner. The arrow in its header collapses it to one line, for cramped
+  layouts.
 - **Keyboard shortcut** that toggles Feedback mode: record your own, or turn it off. It needs
   Ctrl, Alt or ⌘ so it can't fire while you type.
 - **Pins**: hide the numbered pins on the page (the panel still lists the comments).
+- **Your name on comments**, instead of your git name. Not shown when the app supplies its own
+  signed-in authors.
+- **Agent notes** (on by default): agents must add a note when they resolve or dismiss a comment
+  (`agent-feedback-pins done 3 --note "Made the heading 32px"`), shown in the comment's history.
 
 ## Comment authors
 

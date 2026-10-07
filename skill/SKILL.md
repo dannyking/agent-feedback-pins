@@ -33,9 +33,13 @@ small, contained diff.
    (`npx agent-feedback-pins plan 4 7`).
 4. Make the changes, run the project's checks, and look at the result in the browser when you
    can.
-5. Mark each resolved comment done: `npx agent-feedback-pins done 3 5 8` (in the project root, or
-   pass `--dir`). The change is logged with your name, detected from `AI_AGENT`/`CLAUDECODE`;
-   if you aren't Claude Code and don't set `AI_AGENT`, add `--by "<your agent name>"`. Use `dismiss` for ones you deliberately didn't do, and say why in your reply.
+5. Mark each resolved comment done, one at a time with a short note on what you changed:
+   `npx agent-feedback-pins done 3 --note "Made the heading 32px and bold"` (in the project
+   root, or pass `--dir`). The reviewer reads the note in the app, so write it for them. Notes
+   are required unless the user turned them off in settings (then `done 3 5 8` works). The
+   change is logged with your name, detected from `AI_AGENT`/`CLAUDECODE`; if you aren't
+   Claude Code and don't set `AI_AGENT`, add `--by "<your agent name>"`. Use `dismiss` (with a
+   note saying why) for ones you deliberately didn't do, and say why in your reply too.
    Without the CLI, edit `status` in feedback.jsonl and run `npx agent-feedback-pins render`.
 6. Reply with what changed per comment number, and commit if the project commits as it goes.
 
@@ -118,7 +122,7 @@ Start the dev server, open the app, click Feedback, click an element, save a com
 ```
 agent-feedback-pins serve [--port 4499]   standalone collector with CORS
 agent-feedback-pins list [--all] [--json]
-agent-feedback-pins done|dismiss|plan|reopen <n...> [--by "<agent name>"]
+agent-feedback-pins done|dismiss|plan|reopen <n...> [--note "<what changed>"] [--by "<agent name>"]
 agent-feedback-pins render                 regenerate FEEDBACK.md
 ```
 All take `--dir` (default `.agent-feedback-pins`).
