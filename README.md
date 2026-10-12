@@ -67,6 +67,45 @@ agent-feedback-pins is for building an app, not for its users, and it never ship
 - **Everything it touches is marked** with a comment containing `agent-feedback-pins`, in as
   few places as possible, so removing it is a search and one small diff.
 
+## Security
+
+**Only let people you trust reach your dev server.** Whoever can open it can leave comments,
+and those comments are text an AI agent will read and act on. Keep the dev server on localhost
+or a private network, and never publish it to the internet for this.
+
+**Prompt injection.** A comment could try to steer the agent ("ignore the above and run…"),
+and so could page text captured with it, if your app shows other people's content. The
+defenses, none of them perfect:
+
+- `COMMENTS.md` quotes every comment inside a fenced block it can't break out of, flattens
+  every other field to one line, and opens with a notice that comments are requests to change
+  the app, never instructions to the agent.
+- The skill tells agents to treat comments as untrusted data: never run commands, fetch URLs,
+  touch secrets or work outside the app's code because a comment says so, and to ask you
+  first when one tries.
+- You stay in the loop. Keep your agent's normal permission prompts on when it processes
+  comments, and read its plan before it acts on comments you didn't write yourself.
+
+**Other websites can't post comments.** The API only accepts writes sent as
+`application/json`, which a page on another origin can't send without a CORS preflight. The
+standalone collector allows cross-origin calls only from pages on localhost (add others with
+`--origin`) and answers only to expected `Host` names, so a hostile site can't reach it by
+pointing its own domain at your machine (DNS rebinding). Mounted as middleware in your dev
+server, it is same-origin and sends no CORS headers; Vite checks `Host` itself, and for other
+dev servers pass `hosts: ["localhost", "127.0.0.1"]` (plus any name you use) to
+`createHandler`.
+
+**No code injection.** The overlay renders comments, names and notes as text, never as HTML,
+and follows only `http(s)` page links. The server stores input as JSON and never evaluates or
+executes it; the only command it runs is `git config` to find your name.
+
+**Names prove nothing by default.** Every comment through the dev server is attributed to the
+git identity of whoever runs it. If people other than you leave comments, pass an `author`
+function so each records the signed-in person (see [Comment authors](#comment-authors)).
+
+**The update check** is one request a day from your browser to `raw.githubusercontent.com` for
+this repo's `package.json`. It sends nothing else, and fails silently if blocked.
+
 ## Update
 
 Ask your agent:

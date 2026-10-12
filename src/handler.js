@@ -9,6 +9,22 @@ const CLIENT = join(dirname(fileURLToPath(import.meta.url)), "../client/agent-fe
 export const DEFAULT_DIR = ".agent-feedback-pins";
 export const DEFAULT_BASE = "/__afp";
 
+const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+const hostnameOf = (value) => {
+  try {
+    return new URL(value.includes("://") ? value : `http://${value}`).hostname;
+  } catch {
+    return "";
+  }
+};
+/** Whether a page at this origin may call the API cross-origin, per the `cors` option. */
+function corsAllows(cors, origin) {
+  if (!cors || !origin) return false;
+  if (typeof cors === "function") return !!cors(origin);
+  if (Array.isArray(cors)) return cors.includes(origin);
+  return LOOPBACK.has(hostnameOf(origin));
+}
+
 /**
  * A Connect-style middleware, (req, res, next), that serves the client and the feedback API
  * under `base`. Works with plain node:http, Connect, Express and Vite; anything else can call
@@ -21,7 +37,15 @@ export const DEFAULT_BASE = "/__afp";
  *   base    URL prefix (default /__afp)
  *   author  (req) => {name, email} | undefined, for apps with their own logins.
  *           Default: the git identity of whoever runs the server.
- *   cors    true to allow cross-origin calls (the standalone server uses this)
+ *   cors    allow cross-origin calls (the standalone server uses this): true for pages on
+ *           localhost, 127.0.0.1 or [::1] (any port), an array of exact origins, or
+ *           (origin) => boolean. Never every origin: any site you visit could then read and
+ *           write comments.
+ *   hosts   the Host names to answer to (array), against DNS rebinding; default any. The
+ *           standalone server sets loopback plus its --host.
+ *
+ * Writes must be sent as application/json, which a page on another origin can only do after
+ * a CORS preflight, so an unrelated site can't post comments (they reach an agent as text).
  */
 export function createHandler(options = {}) {
   const dir = resolve(options.dir ?? DEFAULT_DIR);
@@ -51,11 +75,21 @@ export function createHandler(options = {}) {
       res.setHeader("cache-control", "no-store");
       res.end(typeof body === "string" ? body : JSON.stringify(body));
     };
+    if (options.hosts && !options.hosts.includes(hostnameOf(req.headers.host ?? ""))) {
+      return send(403, { error: "unexpected Host header" }), true;
+    }
     if (options.cors) {
-      res.setHeader("access-control-allow-origin", req.headers.origin ?? "*");
-      res.setHeader("access-control-allow-methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-      res.setHeader("access-control-allow-headers", "content-type, authorization");
+      res.setHeader("vary", "Origin");
+      if (corsAllows(options.cors, req.headers.origin)) {
+        res.setHeader("access-control-allow-origin", req.headers.origin);
+        res.setHeader("access-control-allow-methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+        res.setHeader("access-control-allow-headers", "content-type, authorization");
+      }
       if (req.method === "OPTIONS") return send(204, ""), true;
+    }
+    // A cross-site page can send text/plain without asking first; JSON needs a preflight.
+    if (["POST", "PUT", "PATCH"].includes(req.method) && !/^application\/json\b/i.test(req.headers["content-type"] ?? "")) {
+      return send(415, { error: "send JSON, with content-type: application/json" }), true;
     }
     try {
       if (path === "/client.js" && req.method === "GET") {

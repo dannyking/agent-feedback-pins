@@ -26,7 +26,7 @@
   ).replace(/\/$/, "");
   const config = window.agentFeedbackPins ?? {};
   // Kept equal to package.json's version (a test checks); bump both when releasing.
-  const VERSION = "0.2.0";
+  const VERSION = "0.2.1";
   const LATEST_URL = "https://raw.githubusercontent.com/dannyking/agent-feedback-pins/main/package.json";
   const UI_TAGS = "agent-feedback-pins, agent-feedback-pins-button";
 
@@ -172,6 +172,18 @@
   }
 
   const isOpen = (i) => i.status === "open" || i.status === "planned";
+  /** A comment's page as a link, http(s) only: a stored javascript: URL must never become an href. */
+  const pageHref = (i) => {
+    for (const candidate of [i.url, i.route]) {
+      try {
+        const u = new URL(candidate, location.href);
+        if (candidate && /^https?:$/.test(u.protocol)) return u.href;
+      } catch {
+        // Not a URL: try the next one.
+      }
+    }
+    return null;
+  };
   const lastResolution = (i) => (i.history ?? []).findLast((x) => x.status === "done" || x.status === "dismissed");
   const ago = (iso) => {
     const s = (Date.parse(iso) - Date.now()) / 1000;
@@ -668,7 +680,7 @@
           "div",
           { className: "meta" },
           h("span", {}, `${item.author?.name ?? "Unknown"} · ${onThisPage(item) ? "" : `${item.route} › `}${item.element?.section ?? "Whole page"}`),
-          onThisPage(item) ? null : h("a", { className: "link", href: item.url || item.route }, "Go to page"),
+          onThisPage(item) || !pageHref(item) ? null : h("a", { className: "link", href: pageHref(item) }, "Go to page"),
           mine(item)
             ? [
                 h("button", { type: "button", className: "link", onClick: () => ((state.panelEditing = item.id), renderPanel()) }, "Edit"),
@@ -813,7 +825,7 @@
           resolved
             ? h("button", { type: "button", className: "link", onClick: () => void setStatus(item, "open") }, "Mark unresolved")
             : h("button", { type: "button", className: "link", onClick: () => void setStatus(item, "done") }, "Mark done"),
-          here ? null : h("a", { className: "link", href: item.url || item.route }, "Go to page"),
+          here || !pageHref(item) ? null : h("a", { className: "link", href: pageHref(item) }, "Go to page"),
         ),
         log.length ? h("ul", { className: "log" }, log) : null,
       ),

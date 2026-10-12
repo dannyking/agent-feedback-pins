@@ -54,8 +54,13 @@ export interface HandlerOptions {
   base?: string;
   /** The signed-in person, for apps with their own logins. Default: the git identity. */
   author?: (req: IncomingMessage) => Author | undefined | Promise<Author | undefined>;
-  /** Allow cross-origin calls. */
-  cors?: boolean;
+  /**
+   * Allow cross-origin calls: true for pages on localhost, 127.0.0.1 or [::1] (any port), an array
+   * of exact origins, or a predicate. Never every origin.
+   */
+  cors?: boolean | string[] | ((origin: string) => boolean);
+  /** Host names to answer to, against DNS rebinding. Default: any. */
+  hosts?: string[];
 }
 
 export interface TagOptions {

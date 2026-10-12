@@ -16,6 +16,10 @@ Usage:
 
 Options:
   --dir <path>   feedback folder (default ${DEFAULT_DIR})
+  --origin <url> serve: also let a page at this origin call the collector (repeatable;
+                 pages on localhost, 127.0.0.1 and [::1] always can)
+  --allow-host <name>  serve: also answer to this Host name (repeatable; default
+                 localhost, 127.0.0.1, [::1] and --host)
   --note <text>  what you changed, or why you didn't; shown in the app's history.
                  Required for done and dismiss unless notes are turned off in settings
                  (one note per command, so resolve comments one at a time)
@@ -31,6 +35,8 @@ const { values, positionals } = parseArgs({
     host: { type: "string", default: "127.0.0.1" },
     by: { type: "string" },
     note: { type: "string" },
+    origin: { type: "string", multiple: true, default: [] },
+    "allow-host": { type: "string", multiple: true, default: [] },
     all: { type: "boolean", default: false },
     json: { type: "boolean", default: false },
     help: { type: "boolean", short: "h", default: false },
@@ -58,7 +64,13 @@ function setStatus(status) {
 try {
   switch (cmd) {
     case "serve": {
-      const handler = createHandler({ dir: values.dir, cors: true });
+      const origins = values.origin.map((o) => new URL(o).origin);
+      const loopback = (o) => ["localhost", "127.0.0.1", "[::1]"].includes(new URL(o).hostname);
+      const handler = createHandler({
+        dir: values.dir,
+        cors: (origin) => loopback(origin) || origins.includes(origin),
+        hosts: ["localhost", "127.0.0.1", "[::1]", values.host, ...values["allow-host"]],
+      });
       const server = createServer((req, res) =>
         handler(req, res, () => {
           res.statusCode = 404;
