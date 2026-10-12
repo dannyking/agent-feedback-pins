@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { cliActor, createHandler, FeedbackStore, injectHtml, lastResolution } from "../src/index.js";
@@ -81,8 +81,33 @@ test("cliActor names the coding agent", () => {
   assert.equal(cliActor({}).agent, undefined);
 });
 
+test("comments render to COMMENTS.md, replacing a FEEDBACK.md from before the rename", () => {
+  const dir = tmp();
+  writeFileSync(join(dir, "FEEDBACK.md"), "stale");
+  const s = new FeedbackStore(dir);
+  s.add({ comment: "Hi", route: "/", author: jo });
+  assert.match(readFileSync(join(dir, "COMMENTS.md"), "utf8"), /Hi/);
+  assert.equal(existsSync(join(dir, "FEEDBACK.md")), false);
+});
+
+test("the panel names the folder as people see it", async () => {
+  const at = async (opts) => {
+    const handler = createHandler(opts);
+    const server = createServer((req, res) => handler(req, res));
+    await new Promise((r) => server.listen(0, "127.0.0.1", r));
+    try {
+      return (await (await fetch(`http://127.0.0.1:${server.address().port}/__afp/api/me`)).json()).file;
+    } finally {
+      server.close();
+    }
+  };
+  assert.equal(await at({ dir: join(homedir(), "proj/.agent-feedback-pins") }), "~/proj/.agent-feedback-pins/COMMENTS.md");
+  assert.equal(await at({ dir: tmp(), shownDir: "~/projects/app/.agent-feedback-pins/" }), "~/projects/app/.agent-feedback-pins/COMMENTS.md");
+});
+
 test("handler serves the client and the API", async () => {
-  const handler = createHandler({ dir: tmp(), author: (req) => (req.headers["x-user"] === "jo" ? jo : undefined) });
+  const dir = tmp();
+  const handler = createHandler({ dir, author: (req) => (req.headers["x-user"] === "jo" ? jo : undefined) });
   const server = createServer((req, res) => handler(req, res, () => res.end("app")));
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -92,6 +117,8 @@ test("handler serves the client and the API", async () => {
     assert.match(js.headers.get("content-type"), /javascript/);
     const me = await (await fetch(`${base}/__afp/api/me`, { headers: { "x-user": "jo" } })).json();
     assert.deepEqual(me.author, jo);
+    assert.equal(me.file, `${dir}/COMMENTS.md`); // the real folder (tmp is outside home)
+    assert.equal((await (await fetch(`${base}/__afp/api/me`)).json()).file, me.file);
     const post = (body) =>
       fetch(`${base}/__afp/api/items`, { method: "POST", headers: { "content-type": "application/json", "x-user": "jo" }, body: JSON.stringify(body) });
     assert.equal((await post({ comment: "" })).status, 400);
@@ -121,6 +148,12 @@ test("handler serves the client and the API", async () => {
   } finally {
     server.close();
   }
+});
+
+test("the client's version matches package.json, so the update notice compares like with like", () => {
+  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  const client = readFileSync(new URL("../client/agent-feedback-pins.js", import.meta.url), "utf8");
+  assert.equal(/const VERSION = "([^"]+)"/.exec(client)?.[1], pkg.version);
 });
 
 test("injectHtml adds the script once", () => {

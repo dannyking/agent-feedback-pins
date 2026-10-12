@@ -25,6 +25,9 @@
     attr("data-endpoint") ?? (script?.src ? new URL(".", script.src).href : "/__afp/")
   ).replace(/\/$/, "");
   const config = window.agentFeedbackPins ?? {};
+  // Kept equal to package.json's version (a test checks); bump both when releasing.
+  const VERSION = "0.2.0";
+  const LATEST_URL = "https://raw.githubusercontent.com/dannyking/agent-feedback-pins/main/package.json";
   const UI_TAGS = "agent-feedback-pins, agent-feedback-pins-button";
 
   // ---------- Talking to the collector ----------
@@ -45,7 +48,7 @@
   const state = {
     active: false,
     items: [],
-    me: { author: { name: "", email: "" }, file: ".agent-feedback-pins/FEEDBACK.md" },
+    me: { author: { name: "", email: "" }, file: ".agent-feedback-pins/COMMENTS.md" },
     draft: null, // { element, at: {x, y}, editing? }
     panelEditing: null, // id of the panel comment being edited inline
     modal: null, // "history" or "settings" while a modal is open
@@ -54,6 +57,7 @@
     picking: false, // choosing a spot for the button
     pinHint: false, // showing the "click the part of the page" prompt
     recording: false, // recording a new keyboard shortcut
+    latest: null, // the newest version on GitHub, when it is newer than this one
   };
 
   const DEFAULTS = {
@@ -267,8 +271,8 @@
     .act { display: flex; align-items: center; justify-content: center; gap: 6px; border-radius: 8px; padding: 7px 12px;
       font-size: 12px; font-weight: 600; border: 1px solid var(--l); color: var(--fg); background: var(--p); }
     .act:hover { border-color: var(--a); }
-    .act.primary { border-color: var(--a); background: var(--a); color: var(--oa); }
-    .act.primary:hover { filter: brightness(1.08); }
+    .act[aria-pressed="true"] { border-color: var(--a); background: var(--a); color: var(--oa); }
+    .act[aria-pressed="true"]:hover { filter: brightness(1.08); }
     .filters { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; }
     .filters-label { color: var(--mu); }
     .filters .tabs { margin-top: 0; }
@@ -315,6 +319,23 @@
     .note { margin: 1px 0 3px 8px; padding-left: 6px; border-left: 2px solid var(--l); color: var(--mu); white-space: pre-wrap; }
     .head-actions { display: flex; align-items: center; gap: 12px; }
     .icon-btn { display: flex; color: var(--mu); }
+    .gear { position: relative; }
+    .dot { position: absolute; top: -2px; right: -3px; width: 7px; height: 7px; border-radius: 999px; background: var(--a);
+      box-shadow: 0 0 0 2px var(--p); }
+    .update { margin-top: 12px; border-radius: 8px; border: 1px solid var(--a); background: ${mix("--a", 12)}; padding: 8px 10px;
+      font-size: 12px; }
+    .update b { color: var(--at); }
+    .remove-open { width: 100%; }
+    .warn { margin-top: 12px; border-radius: 8px; border: 1px solid var(--bad); background: ${mix("--bad", 10)}; padding: 8px 10px;
+      font-size: 12px; }
+    .warn b { color: var(--bad); }
+    .prompt { margin-top: 8px; display: flex; align-items: flex-start; gap: 8px; border-radius: 8px; border: 1px solid var(--l);
+      background: ${mix("--in", 60)}; padding: 8px 10px; font-size: 13px; user-select: all; }
+    .prompt span { flex: 1; }
+    .copy { padding: 4px 10px; flex-shrink: 0; user-select: none; }
+    .steps { margin: 0; padding-left: 18px; font-size: 12px; display: flex; flex-direction: column; gap: 4px; }
+    .steps li { display: list-item; background: none; padding: 0; border-radius: 0; }
+    .version { margin-top: 4px; font-size: 11px; color: var(--di); }
     .icon-btn:hover { color: var(--fg); }
     .settings { overflow-y: auto; margin-top: 4px; padding-right: 4px; }
     .field { margin-top: 16px; }
@@ -324,7 +345,7 @@
     .swatches { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
     .sw { width: 24px; height: 24px; border-radius: 999px; border: 2px solid var(--p); box-shadow: 0 0 0 1px var(--l); }
     .sw[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--fg); }
-    .sw.app { background: conic-gradient(#d303be, #2563eb, #16a34a, #ea580c, #d303be); }
+    .sw.app { background: conic-gradient(#f9a8d4, #a5b4fc, #86efac, #fde68a, #f9a8d4); }
     input[type="color"] { width: 28px; height: 28px; padding: 0; border: 0; background: none; cursor: pointer; }
     input[type="text"] { width: 100%; border-radius: 8px; border: 1px solid var(--l); background: ${mix("--in", 60)};
       padding: 6px 8px; font: inherit; font-size: 13px; color: var(--fg); outline: none; }
@@ -487,6 +508,7 @@
   function openEditor(draft) {
     state.pinHint = false;
     state.draft = draft;
+    renderPanel();
     highlight.style.display = "none";
     const { editing, element: e } = draft;
     const canEdit = !editing || mine(editing);
@@ -585,9 +607,11 @@
   }
 
   function closeEditor() {
+    const wasWholePage = state.draft && !state.draft.element;
     state.pinHint = false;
     state.draft = null;
     editorSlot.replaceChildren();
+    if (wasWholePage) renderPanel();
   }
 
   async function remove(item) {
@@ -673,6 +697,8 @@
     const { collapsed, scope } = prefs().panel;
     // This page's comments first, then the rest of the app's.
     const items = scope === "page" ? here : [...here, ...open.filter((i) => !onThisPage(i))];
+    // Highlights the mode in use: Whole page while its comment box is open, else Pin comment.
+    const wholePage = !!state.draft && !state.draft.element;
     const toggle = () => void saveSettings((s) => (s.panel = { ...s.panel, collapsed: !collapsed }));
     const header = h(
       "div",
@@ -687,7 +713,12 @@
       h(
         "div",
         { className: "head-actions" },
-        h("button", { type: "button", className: "icon-btn", title: "Settings", "aria-label": "Settings", onClick: () => openModal("settings") }, icon("gear", 16)),
+        h(
+          "button",
+          { type: "button", className: "icon-btn gear", title: state.latest ? `Settings (version ${state.latest} is available)` : "Settings", "aria-label": "Settings", onClick: () => openModal("settings") },
+          icon("gear", 16),
+          state.latest ? h("span", { className: "dot" }) : null,
+        ),
         h("button", { type: "button", className: "icon-btn exit", title: "Exit feedback mode", "aria-label": "Exit feedback mode", onClick: () => setActive(false) }, icon("x", 16), "(Esc)"),
       ),
     );
@@ -704,8 +735,8 @@
         h(
           "div",
           { className: "actions" },
-          h("button", { type: "button", className: "act primary", onClick: showPinHint }, icon("pin"), "Pin comment"),
-          h("button", { type: "button", className: "act", onClick: () => openEditor({ element: null, at: { x: innerWidth - 380, y: innerHeight - 320 } }) }, icon("page"), "Whole page"),
+          h("button", { type: "button", className: "act", "aria-pressed": String(!wholePage), onClick: showPinHint }, icon("pin"), "Pin comment"),
+          h("button", { type: "button", className: "act", "aria-pressed": String(wholePage), onClick: () => openEditor({ element: null, at: { x: innerWidth - 380, y: innerHeight - 320 } }) }, icon("page"), "Whole page"),
         ),
         h(
           "div",
@@ -808,7 +839,7 @@
 
   function renderModal() {
     if (!state.modal) return modalSlot.replaceChildren();
-    const body = state.modal === "settings" ? renderSettings() : renderHistory();
+    const body = state.modal === "settings" ? renderSettings() : state.modal === "remove" ? renderRemove() : renderHistory();
     modalSlot.replaceChildren(
       h(
         "div",
@@ -820,7 +851,33 @@
 
   // ---------- Settings ----------
 
-  const ACCENTS = ["#d303be", "#7c3aed", "#2563eb", "#0891b2", "#16a34a", "#ea580c", "#dc2626", "#475569"];
+  // Pastel presets, by name for their tooltips. Any other color goes through the custom picker.
+  const PASTELS = {
+    "#f9a8d4": "Pink",
+    "#fda4af": "Rose",
+    "#fca5a5": "Coral",
+    "#fdba74": "Peach",
+    "#fde68a": "Butter",
+    "#d9f99d": "Pistachio",
+    "#86efac": "Mint",
+    "#5eead4": "Seafoam",
+    "#a5f3fc": "Aqua",
+    "#7dd3fc": "Sky",
+    "#a5b4fc": "Periwinkle",
+    "#c4b5fd": "Lavender",
+    "#e9d5ff": "Lilac",
+    "#cbd5e1": "Mist",
+  };
+  const ACCENTS = Object.keys(PASTELS);
+
+  /** Whether a #rrggbb color is light enough to need dark text on it (WCAG relative luminance). */
+  function isLight(hex) {
+    const [r, g, b] = [1, 3, 5].map((i) => {
+      const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4;
+  }
   const DARK = {
     panel: "#1c1c22",
     "panel-2": "#272730",
@@ -840,9 +897,13 @@
     const { accent, mode } = prefs().theme;
     const dark = mode === "dark" || (mode === "auto" && darkQuery.matches);
     const vars = mode ? { ...(dark ? DARK : LIGHT) } : {};
+    const light = !!accent && isLight(accent);
     if (accent) vars.accent = accent;
-    // Accent text that reads on the panel: the accent pulled toward the foreground color.
-    if (accent || mode) vars["accent-text"] = `color-mix(in srgb, var(--afp-accent, #d303be) 70%, var(--afp-fg, #141418))`;
+    // Dark text on a pale accent (pins, Save, the highlighted button), white on a deep one.
+    if (accent) vars["on-accent"] = light ? "#1c1c22" : "#ffffff";
+    // Accent text that reads on the panel: the accent pulled toward the foreground color,
+    // further for a pale accent, which on its own is too faint to read as text.
+    if (accent || mode) vars["accent-text"] = `color-mix(in srgb, var(--afp-accent, #d303be) ${light ? 45 : 70}%, var(--afp-fg, #141418))`;
     // A chosen light or dark mode won't match the page, so a docked button gets its own background.
     buttonHost.toggleAttribute("data-themed", !!mode);
     for (const host of [buttonHost, overlayHost]) {
@@ -952,12 +1013,12 @@
       { className: "swatches" },
       h("button", { type: "button", className: "sw app", title: "The app's theme (--afp-accent)", "aria-pressed": String(!p.theme.accent), onClick: () => void saveSettings((s) => set("theme")(s, { accent: undefined })) }),
       ACCENTS.map((c) =>
-        h("button", { type: "button", className: "sw", title: c, style: { background: c }, "aria-pressed": String(p.theme.accent === c), onClick: () => void saveSettings((s) => set("theme")(s, { accent: c })) }),
+        h("button", { type: "button", className: "sw", title: PASTELS[c], "aria-label": PASTELS[c], style: { background: c }, "aria-pressed": String(p.theme.accent === c), onClick: () => void saveSettings((s) => set("theme")(s, { accent: c })) }),
       ),
       h("input", {
         type: "color",
         title: "Custom color",
-        value: custom || "#d303be",
+        value: custom || "#f9a8d4",
         onChange: (e) => void saveSettings((s) => set("theme")(s, { accent: e.target.value })),
       }),
     );
@@ -1023,6 +1084,14 @@
 
     return [
       h("div", { className: "row" }, h("div", { className: "title" }, "Settings"), h("button", { type: "button", className: "x", title: "Close (Esc)", "aria-label": "Close", onClick: closeModal }, "×")),
+      state.latest
+        ? h(
+            "div",
+            { className: "update" },
+            h("b", {}, `Version ${state.latest} is available`),
+            ` (you have ${VERSION}). Tell your agent to update agent-feedback-pins to the latest version.`,
+          )
+        : null,
       h(
         "div",
         { className: "settings" },
@@ -1035,7 +1104,7 @@
         field(
           "Panel position",
           seg([["bottom-right", "Bottom right"], ["bottom-left", "Bottom left"], ["top-right", "Top right"], ["top-left", "Top left"]], p.panel.corner, (s, corner) => set("panel")(s, { corner })),
-          h("p", { className: "hint" }, "Collapse it to just its header with the arrow at its top."),
+          h("p", { className: "hint" }, "Click its title to collapse it to one line."),
         ),
         field("Keyboard shortcut for Feedback mode", shortcut),
         field(
@@ -1073,13 +1142,19 @@
           ),
           h("p", { className: "hint" }, "Notes show in each comment's history under Resolved."),
         ),
+        field(
+          "Remove",
+          h("button", { type: "button", className: "act remove-open", onClick: () => openModal("remove") }, "How to remove agent-feedback-pins…"),
+          h("p", { className: "hint" }, "Before you ship, or when you're done with it. Your agent can do it for you."),
+        ),
         settingsError ? h("div", { className: "err" }, settingsError) : null,
         h(
           "div",
           { className: "row foot" },
-          h("span", {}, `Saved to ${state.me.file.replace(/FEEDBACK\.md$/, "settings.json")}`),
+          h("span", {}, `Saved to ${state.me.file.replace(/COMMENTS\.md$/, "settings.json")}`),
           h("button", { type: "button", className: "link danger", onClick: () => void saveSettings((s) => Object.keys(s).forEach((k) => delete s[k])) }, "Reset all"),
         ),
+        h("div", { className: "version" }, `agent-feedback-pins ${VERSION}`),
       ),
     ];
   }
@@ -1160,6 +1235,104 @@
     renderPanel();
   }
 
+  // ---------- Removal instructions ----------
+
+  let keepComments = true;
+
+  function renderRemove() {
+    const folder = state.me.file.replace(/\/COMMENTS\.md$/, "");
+    const prompt = keepComments
+      ? `Remove agent-feedback-pins from this project. Keep the ${folder} folder with my comments.`
+      : `Remove agent-feedback-pins from this project, and delete the ${folder} folder with my comments.`;
+    const copy = h("button", { type: "button", className: "act copy" }, "Copy");
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(prompt);
+        copy.textContent = "Copied";
+      } catch {
+        copy.textContent = "Select and copy it";
+      }
+    });
+    const choice = (keep, label) =>
+      h("button", { type: "button", "aria-pressed": String(keepComments === keep), onClick: () => ((keepComments = keep), renderModal()) }, label);
+    return [
+      h(
+        "div",
+        { className: "row" },
+        h("div", { className: "title" }, "Remove agent-feedback-pins"),
+        h("button", { type: "button", className: "x", title: "Close (Esc)", "aria-label": "Close", onClick: closeModal }, "×"),
+      ),
+      h(
+        "div",
+        { className: "settings" },
+        h(
+          "div",
+          { className: "warn" },
+          h("b", {}, "Your comments can be lost. "),
+          "Every comment and its history lives in ",
+          h("code", {}, folder),
+          ". Removing the feature leaves that folder alone unless you delete it; to keep your comments, keep the folder (or copy it somewhere else first).",
+        ),
+        h(
+          "div",
+          { className: "field" },
+          h("div", { className: "label" }, "Tell your agent"),
+          h("div", { className: "tabs" }, choice(true, "Keep my comments"), choice(false, "Delete my comments")),
+          h("div", { className: "prompt" }, h("span", {}, prompt), copy),
+        ),
+        h(
+          "div",
+          { className: "field" },
+          h("div", { className: "label" }, "Or by hand"),
+          h(
+            "ol",
+            { className: "steps" },
+            h("li", {}, "Search the project for ", h("code", {}, "agent-feedback-pins"), " and ", h("code", {}, "__afp"), ", and delete each integration block (the script tag, middleware or Vite plugin)."),
+            h("li", {}, "Uninstall the dev dependency, e.g. ", h("code", {}, "pnpm remove agent-feedback-pins"), "."),
+            keepComments
+              ? h("li", {}, "Keep ", h("code", {}, folder), " for your comments.")
+              : h("li", {}, "Delete ", h("code", {}, folder), " and its line in ", h("code", {}, ".gitignore"), ". This deletes your comments for good."),
+            h("li", {}, "Build for production and check nothing references ", h("code", {}, "__afp"), "."),
+          ),
+        ),
+        h("button", { type: "button", className: "link quiet", style: { marginTop: "12px", fontSize: "12px" }, onClick: () => openModal("settings") }, "← Back to settings"),
+      ),
+    ];
+  }
+
+  // ---------- Update notice ----------
+
+  const newer = (a, b) => {
+    const [x, y] = [a, b].map((v) => String(v).split(".").map((n) => parseInt(n, 10) || 0));
+    for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
+    return false;
+  };
+
+  /** Ask GitHub for the latest version, at most once a day per browser. Best-effort and silent. */
+  async function checkForUpdate() {
+    const KEY = "agent-feedback-pins:latest";
+    let latest;
+    try {
+      const cached = JSON.parse(localStorage.getItem(KEY) || "null");
+      if (cached && Date.now() - cached.at < 864e5) latest = cached.version;
+    } catch {
+      // No storage (private mode): check every page load instead.
+    }
+    if (!latest) {
+      try {
+        latest = (await (await fetch(LATEST_URL, { cache: "no-store" })).json()).version;
+        localStorage.setItem(KEY, JSON.stringify({ version: latest, at: Date.now() }));
+      } catch {
+        // Offline, blocked by the page's CSP, or no storage: no notice.
+      }
+    }
+    if (latest && newer(latest, VERSION)) {
+      state.latest = latest;
+      if (state.active) renderPanel();
+      if (state.modal === "settings") renderModal();
+    }
+  }
+
   // ---------- Start ----------
 
   async function start() {
@@ -1174,6 +1347,7 @@
     dock();
     new MutationObserver(dock).observe(document.body, { childList: true, subtree: true });
     void reload();
+    void checkForUpdate();
   }
   if (document.body) void start();
   else document.addEventListener("DOMContentLoaded", () => void start());

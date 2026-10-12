@@ -46,8 +46,10 @@ export interface Settings {
 }
 
 export interface HandlerOptions {
-  /** Where feedback.jsonl, FEEDBACK.md and settings.json live. Default .agent-feedback-pins */
+  /** Where feedback.jsonl, COMMENTS.md and settings.json live. Default .agent-feedback-pins */
   dir?: string;
+  /** That folder as people should see it in the panel, where it differs from `dir` (a collector in a container). Default: `dir` as an absolute path, ~ for home. */
+  shownDir?: string;
   /** URL prefix. Default /__afp */
   base?: string;
   /** The signed-in person, for apps with their own logins. Default: the git identity. */

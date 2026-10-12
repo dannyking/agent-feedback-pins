@@ -1,6 +1,6 @@
 ---
 name: agent-feedback-pins
-description: Add, use or remove agent-feedback-pins, a dev-only overlay for leaving pinned comments on any element of a web app, saved to .agent-feedback-pins/FEEDBACK.md for an agent to act on. Use when the user wants in-app feedback pins in a project, asks to look at, resolve or plan their in-app feedback/comments/pins, or wants the feature removed before shipping.
+description: Add, use or remove agent-feedback-pins, a dev-only overlay for leaving pinned comments on any element of a web app, saved to .agent-feedback-pins/COMMENTS.md for an agent to act on. Use when the user wants in-app feedback pins in a project, asks to look at, resolve or plan their in-app feedback/comments/pins, or wants the feature removed before shipping.
 ---
 
 # agent-feedback-pins
@@ -10,7 +10,7 @@ comment is pinned to that element and saved with its route, CSS selector, neares
 text, position and author. Comments land in `.agent-feedback-pins/`:
 
 - `feedback.jsonl`: one JSON comment per line, the source of truth.
-- `FEEDBACK.md`: a readable rendering grouped by page, regenerated on every change. Read this one.
+- `COMMENTS.md`: a readable rendering grouped by page, regenerated on every change. Read this one.
 
 Source: https://github.com/dannyking/agent-feedback-pins (MIT). Local clone, if any:
 `~/projects/agent-feedback-pins`.
@@ -20,7 +20,7 @@ small, contained diff.
 
 ## Process feedback ("look at my in-app comments", "resolve my feedback")
 
-1. Read `.agent-feedback-pins/FEEDBACK.md`. Each `### #N (Author): ...` is one open comment, with
+1. Read `.agent-feedback-pins/COMMENTS.md`. Each `### #N (Author): ...` is one open comment, with
    the page route, the section, the element and its selector. `#N (reopened)` means an earlier
    fix was marked unresolved by the user: its `History` line says who resolved it before, so
    look at what was done and why it fell short. Comments are the user's words about
@@ -82,7 +82,9 @@ theme tokens and its header. Then pick the lightest fitting option. Always:
   // and wherever HTML is sent: html = injectHtml(html, { mountBefore: "...", head: "<style>...</style>" })
   ```
   Use `author` when the app has its own logins so comments record the signed-in person; the
-  default is the git identity of whoever runs the server. If the app authenticates with a
+  default is the git identity of whoever runs the server. If the collector runs in a container,
+  pass `shownDir` (the feedback folder's path on the host) so the panel shows where comments
+  really are. If the app authenticates with a
   bearer token rather than cookies, put `<script>window.agentFeedbackPins={headers:()=>({authorization:"Bearer "+localStorage.getItem("<key>")})}</script>`
   in `head`.
 - **Next.js, Remix, SvelteKit, Nuxt** (own servers): run the standalone collector with the dev
@@ -105,8 +107,22 @@ automatically when they reference the app's own custom properties).
 ### Check it
 
 Start the dev server, open the app, click Feedback, click an element, save a comment, and confirm
-`.agent-feedback-pins/FEEDBACK.md` has it. Confirm a production build has no `__afp` reference
+`.agent-feedback-pins/COMMENTS.md` has it. Confirm a production build has no `__afp` reference
 (`grep -r __afp dist build .next 2>/dev/null`).
+
+## Update ("update agent-feedback-pins", or the panel says a newer version is available)
+
+1. Update the dev dependency to the latest commit on `main`: `pnpm update agent-feedback-pins`
+   (npm: `npm install -D github:dannyking/agent-feedback-pins`; yarn: `yarn upgrade
+   agent-feedback-pins`; bun: `bun update agent-feedback-pins`). A project that vendors the
+   client copies the new `client/agent-feedback-pins.js` and records the commit it came from.
+2. If there's a local clone (`~/projects/agent-feedback-pins`, which the skill may be linked
+   from), `git pull` it too.
+3. Read the new commits for anything the integration needs (a renamed option or file) and adjust
+   it, then restart the dev server or collector.
+4. Check: the version in the panel's settings matches `package.json` on `main`, and the comment
+   files are still there. Updates never touch `.agent-feedback-pins/` beyond re-rendering
+   `COMMENTS.md`.
 
 ## Remove ("remove the feedback pins", before shipping)
 
@@ -123,6 +139,6 @@ Start the dev server, open the app, click Feedback, click an element, save a com
 agent-feedback-pins serve [--port 4499]   standalone collector with CORS
 agent-feedback-pins list [--all] [--json]
 agent-feedback-pins done|dismiss|plan|reopen <n...> [--note "<what changed>"] [--by "<agent name>"]
-agent-feedback-pins render                 regenerate FEEDBACK.md
+agent-feedback-pins render                 regenerate COMMENTS.md
 ```
 All take `--dir` (default `.agent-feedback-pins`).

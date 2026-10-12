@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 /** Statuses a comment moves through. */
@@ -39,13 +39,13 @@ function cleanAuthor(a) {
 
 /**
  * The feedback store: feedback.jsonl (one JSON comment per line, the source of truth) plus
- * FEEDBACK.md, a readable rendering regenerated on every change for people and agents.
+ * COMMENTS.md, a readable rendering regenerated on every change for people and agents.
  */
 export class FeedbackStore {
   constructor(dir) {
     this.dir = dir;
     this.jsonl = join(dir, "feedback.jsonl");
-    this.markdown = join(dir, "FEEDBACK.md");
+    this.markdown = join(dir, "COMMENTS.md");
     this.settingsFile = join(dir, "settings.json");
   }
 
@@ -62,7 +62,7 @@ export class FeedbackStore {
     const settings = cleanSettings(input);
     this.ensureDir();
     writeFileSync(this.settingsFile, JSON.stringify(settings, null, 2) + "\n");
-    if (existsSync(this.jsonl)) this.render(); // FEEDBACK.md says whether notes are wanted
+    if (existsSync(this.jsonl)) this.render(); // COMMENTS.md says whether notes are wanted
     return settings;
   }
 
@@ -148,9 +148,11 @@ export class FeedbackStore {
     writeFileSync(tmp, items.map((i) => JSON.stringify(i)).join("\n") + (items.length ? "\n" : ""));
     renameSync(tmp, this.jsonl);
     writeFileSync(this.markdown, renderMarkdown(items, this.getSettings()));
+    // Renamed from FEEDBACK.md: drop the stale copy so no agent reads it.
+    rmSync(join(this.dir, "FEEDBACK.md"), { force: true });
   }
 
-  /** Rewrite FEEDBACK.md from feedback.jsonl (after hand edits or upgrades). */
+  /** Rewrite COMMENTS.md from feedback.jsonl (after hand edits or upgrades). */
   render() {
     this.save(this.list());
   }

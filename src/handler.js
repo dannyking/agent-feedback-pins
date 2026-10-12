@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gitAuthor } from "./identity.js";
 import { FeedbackStore } from "./store.js";
@@ -14,7 +15,9 @@ export const DEFAULT_BASE = "/__afp";
  * it with raw Node request and response objects (it returns true when it handled the request).
  *
  * Options:
- *   dir     where feedback.jsonl, FEEDBACK.md and settings.json live (default .agent-feedback-pins)
+ *   dir     where feedback.jsonl, COMMENTS.md and settings.json live (default .agent-feedback-pins)
+ *   shownDir  that folder as people should see it, where it differs from `dir` (a collector in a
+ *           container, say). Default: `dir` as an absolute path, with ~ for the home folder.
  *   base    URL prefix (default /__afp)
  *   author  (req) => {name, email} | undefined, for apps with their own logins.
  *           Default: the git identity of whoever runs the server.
@@ -24,7 +27,9 @@ export function createHandler(options = {}) {
   const dir = resolve(options.dir ?? DEFAULT_DIR);
   const base = (options.base ?? DEFAULT_BASE).replace(/\/$/, "");
   const store = new FeedbackStore(dir);
-  const shown = `${basename(dir)}/FEEDBACK.md`;
+  const home = homedir();
+  const shownDir = options.shownDir ?? (dir === home || dir.startsWith(`${home}/`) ? `~${dir.slice(home.length)}` : dir);
+  const shown = `${shownDir.replace(/\/$/, "")}/COMMENTS.md`;
   // The app's signed-in person, else the git identity (renamed if they set a name in settings).
   const appAuthor = async (req) => (options.author ? await options.author(req) : undefined);
   const localAuthor = () => {

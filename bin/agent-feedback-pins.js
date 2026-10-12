@@ -12,7 +12,7 @@ Usage:
   agent-feedback-pins dismiss <n...>                            mark comments dismissed
   agent-feedback-pins reopen <n...>                             mark comments open again
   agent-feedback-pins plan <n...>                               mark comments planned
-  agent-feedback-pins render                                    regenerate FEEDBACK.md
+  agent-feedback-pins render                                    regenerate COMMENTS.md
 
 Options:
   --dir <path>   feedback folder (default ${DEFAULT_DIR})
