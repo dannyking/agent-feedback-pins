@@ -23,10 +23,10 @@ To have the skill available in every project, see [Install the skill](#install-t
 - Comments go to `.agent-feedback-pins/feedback.jsonl` (the source of truth) and
   `.agent-feedback-pins/FEEDBACK.md` (a readable version for people and agents).
 - Pins stay on the page; you can edit or delete your own comments and mark any as done.
-- **View all and resolved** in the Feedback panel lists every comment, open and resolved, with a
+- **Resolved** in the Feedback panel (beside the This page and All pages filters) lists every comment, open and resolved, with a
   log of who resolved each one, when, and the agent's note on what it changed. Mark a resolved comment
   unresolved to send it back; it shows up in `FEEDBACK.md` as reopened, with its history.
-- **Alt+Shift+F** (⌥⇧F on a Mac) toggles Feedback mode from anywhere in the app.
+- **⌥⇧C** on a Mac (**Alt+Shift+C** on Windows and Linux) toggles Feedback mode from anywhere in the app.
 - Tell your agent "look at my in-app feedback" and it plans, fixes and marks them done.
 
 It is dev-only and built to be removed before shipping: one dev dependency and one

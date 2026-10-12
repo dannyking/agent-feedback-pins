@@ -33,7 +33,7 @@ export interface Settings {
     selector?: string;
     place?: "before" | "after" | "inside";
   };
-  /** Toggles Feedback mode, e.g. "Alt+Shift+F" (the default). "" turns it off. */
+  /** Toggles Feedback mode, e.g. "Alt+Shift+C" (the default). "" turns it off. */
   shortcut?: string;
   /** Numbered pins on the page in Feedback mode. Default true. */
   showPins?: boolean;

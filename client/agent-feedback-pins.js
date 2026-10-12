@@ -52,6 +52,7 @@
     historyFilter: "all", // all | open | resolved
     settings: {}, // as saved; prefs() fills in the defaults
     picking: false, // choosing a spot for the button
+    pinHint: false, // showing the "click the part of the page" prompt
     recording: false, // recording a new keyboard shortcut
   };
 
@@ -59,7 +60,7 @@
     theme: { accent: "", mode: "" }, // "" follows the --afp-* variables
     button: { label: "Feedback", icon: "chat", show: "both" },
     position: { mode: "default", corner: "bottom-left", selector: "", place: "before" },
-    shortcut: "Alt+Shift+F",
+    shortcut: "Alt+Shift+C",
     showPins: true,
     name: "", // "" keeps the git name
     askForNotes: true,
@@ -262,9 +263,15 @@
     .err { margin-top: 4px; font-size: 12px; color: var(--bad); }
     .title { font-weight: 700; color: var(--at); }
     .hint { margin: 4px 0 0; font-size: 12px; color: var(--mu); }
-    .whole { margin-top: 12px; width: 100%; border-radius: 8px; border: 1px solid var(--l); padding: 6px 12px;
-      font-size: 12px; font-weight: 600; color: var(--mu); }
-    .whole:hover { color: var(--fg); }
+    .actions { margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .act { display: flex; align-items: center; justify-content: center; gap: 6px; border-radius: 8px; padding: 7px 12px;
+      font-size: 12px; font-weight: 600; border: 1px solid var(--l); color: var(--fg); background: var(--p); }
+    .act:hover { border-color: var(--a); }
+    .act.primary { border-color: var(--a); background: var(--a); color: var(--oa); }
+    .act.primary:hover { filter: brightness(1.08); }
+    .filters { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; }
+    .filters-label { color: var(--mu); }
+    .filters .tabs { margin-top: 0; }
     ul { list-style: none; margin: 12px 0 0; padding: 0 4px 0 0; max-height: 224px; overflow-y: auto;
       display: flex; flex-direction: column; gap: 8px; }
     li { display: flex; gap: 8px; border-radius: 8px; background: ${mix("--p2", 70)}; padding: 8px; }
@@ -300,7 +307,11 @@
     .log li { display: list-item; background: none; padding: 0; border-radius: 0; }
     .empty { margin-top: 16px; font-size: 12px; color: var(--mu); }
     .panel.collapsed { padding: 10px 16px; }
-    .count { margin-left: 6px; border-radius: 999px; background: ${mix("--a", 20)}; padding: 0 6px; font-size: 10px; font-weight: 700; color: var(--at); }
+    .toggle { display: flex; align-items: center; gap: 4px; }
+    .toggle svg { color: var(--mu); }
+    .toggle:hover svg { color: var(--fg); }
+    .exit { align-items: center; gap: 2px; font-size: 12px; }
+    .count { margin-left: 2px; border-radius: 999px; background: ${mix("--a", 20)}; padding: 0 6px; font-size: 10px; font-weight: 700; color: var(--at); }
     .note { margin: 1px 0 3px 8px; padding-left: 6px; border-left: 2px solid var(--l); color: var(--mu); white-space: pre-wrap; }
     .head-actions { display: flex; align-items: center; gap: 12px; }
     .icon-btn { display: flex; color: var(--mu); }
@@ -346,6 +357,8 @@
     eye: '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
     collapse: '<path d="m6 9 6 6 6-6"/>',
     expand: '<path d="m18 15-6-6-6 6"/>',
+    page: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>',
+    x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
     gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
   };
 
@@ -472,6 +485,7 @@
   }
 
   function openEditor(draft) {
+    state.pinHint = false;
     state.draft = draft;
     highlight.style.display = "none";
     const { editing, element: e } = draft;
@@ -563,7 +577,15 @@
     area.focus();
   }
 
+  /** "Pin comment": a prompt to click the element, cleared by that click or Esc. */
+  function showPinHint() {
+    closeEditor();
+    state.pinHint = true;
+    editorSlot.replaceChildren(h("div", { className: "card banner" }, "Click the part of the page you want to comment on · Esc to cancel"));
+  }
+
   function closeEditor() {
+    state.pinHint = false;
     state.draft = null;
     editorSlot.replaceChildren();
   }
@@ -655,13 +677,18 @@
     const header = h(
       "div",
       { className: "row" },
-      h("div", { className: "title" }, "Feedback mode", collapsed && items.length ? h("span", { className: "count", title: scope === "page" ? "Open comments on this page" : "Open comments across the app" }, String(items.length)) : null),
+      h(
+        "button",
+        { type: "button", className: "title toggle", title: collapsed ? "Expand" : "Collapse", "aria-expanded": String(!collapsed), onClick: toggle },
+        "Feedback mode",
+        collapsed && items.length ? h("span", { className: "count", title: scope === "page" ? "Open comments on this page" : "Open comments across the app" }, String(items.length)) : null,
+        icon(collapsed ? "expand" : "collapse", 16),
+      ),
       h(
         "div",
         { className: "head-actions" },
         h("button", { type: "button", className: "icon-btn", title: "Settings", "aria-label": "Settings", onClick: () => openModal("settings") }, icon("gear", 16)),
-        h("button", { type: "button", className: "icon-btn", title: collapsed ? "Expand" : "Collapse", "aria-label": collapsed ? "Expand panel" : "Collapse panel", "aria-expanded": String(!collapsed), onClick: toggle }, icon(collapsed ? "expand" : "collapse", 16)),
-        h("button", { type: "button", className: "quiet", style: { fontSize: "12px" }, onClick: () => setActive(false) }, "Exit (Esc)"),
+        h("button", { type: "button", className: "icon-btn exit", title: "Exit feedback mode", "aria-label": "Exit feedback mode", onClick: () => setActive(false) }, icon("x", 16), "(Esc)"),
       ),
     );
     if (collapsed) {
@@ -673,28 +700,31 @@
         "div",
         { className: "card panel", style: panelPlace() },
         header,
-        h("p", { className: "hint" }, "Click any part of the page to comment on it. Comments are saved for your next planning session."),
-        h("button", { type: "button", className: "whole", onClick: () => openEditor({ element: null, at: { x: innerWidth - 380, y: innerHeight - 320 } }) }, "Comment on this whole page"),
-        allOpen
-          ? h(
-              "div",
-              { className: "tabs" },
-              [
-                ["all", `All pages (${allOpen})`],
-                ["page", `This page (${here.length})`],
-              ].map(([value, label]) =>
-                h("button", { type: "button", "aria-pressed": String(scope === value), onClick: () => void saveSettings((s) => (s.panel = { ...s.panel, scope: value })) }, label),
-              ),
-            )
-          : null,
-        items.length ? h("ul", {}, items.map(panelItem)) : null,
+        h("p", { className: "hint" }, "Click any part of the page to comment on it. Then tell your agent to resolve the in-app comments."),
         h(
           "div",
-          { className: "foot" },
-          `${allOpen} open comment${allOpen === 1 ? "" : "s"} across the app · `,
-          h("button", { type: "button", className: "link", onClick: () => openModal("history") }, "View all and resolved"),
-          h("div", {}, `Saved to ${state.me.file}`),
+          { className: "actions" },
+          h("button", { type: "button", className: "act primary", onClick: showPinHint }, icon("pin"), "Pin comment"),
+          h("button", { type: "button", className: "act", onClick: () => openEditor({ element: null, at: { x: innerWidth - 380, y: innerHeight - 320 } }) }, icon("page"), "Whole page"),
         ),
+        h(
+          "div",
+          { className: "filters" },
+          h("span", { className: "filters-label" }, "View comments:"),
+          h(
+            "div",
+            { className: "tabs" },
+            [
+              ["page", `This page (${here.length})`],
+              ["all", `All pages (${allOpen})`],
+            ].map(([value, label]) =>
+              h("button", { type: "button", "aria-pressed": String(scope === value), onClick: () => void saveSettings((s) => (s.panel = { ...s.panel, scope: value })) }, label),
+            ),
+            h("button", { type: "button", onClick: () => ((state.historyFilter = "resolved"), openModal("history")) }, `Resolved (${state.items.length - allOpen})`),
+          ),
+        ),
+        items.length ? h("ul", {}, items.map(panelItem)) : null,
+        h("div", { className: "foot" }, `Saved to ${state.me.file}`),
       ),
     );
     renderPins();
@@ -847,7 +877,7 @@
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
   const MODS = ["Ctrl", "Alt", "Shift", "Meta"];
 
-  /** "Alt+Shift+F" for a keydown, using the physical key so Option on a Mac still gives F. */
+  /** "Alt+Shift+C" for a keydown, using the physical key so Option on a Mac still gives C. */
   function comboOf(e) {
     const key = /^Key[A-Z]$|^Digit\d$/.test(e.code) ? e.code.slice(-1) : e.code;
     const mods = MODS.filter((m) => e[`${m.toLowerCase()}Key`]);
@@ -1041,7 +1071,7 @@
             h("input", { type: "checkbox", checked: p.askForNotes, onChange: (e) => void saveSettings((s) => (s.askForNotes = e.target.checked)) }),
             "Ask agents for a note on what they changed when they resolve a comment",
           ),
-          h("p", { className: "hint" }, "Notes show in each comment's history under View all and resolved."),
+          h("p", { className: "hint" }, "Notes show in each comment's history under Resolved."),
         ),
         settingsError ? h("div", { className: "err" }, settingsError) : null,
         h(
@@ -1091,7 +1121,7 @@
       else if (state.panelEditing) {
         state.panelEditing = null;
         renderPanel();
-      } else if (state.draft) closeEditor();
+      } else if (state.draft || state.pinHint) closeEditor();
       else setActive(false);
     },
   };
