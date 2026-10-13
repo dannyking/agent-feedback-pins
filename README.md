@@ -7,7 +7,7 @@ comments are saved to a Markdown file in the project. Your agent picks them up a
 them when you use the included skill, or when you ask it to resolve the in-app comments you left.
 It's easy to remove when you're ready to ship.
 
-![Leaving comments: click Feedback, click part of the page, type what should change](docs/images/leaving-comments.gif)
+![Leaving comments: click Feedback, click part of the page, type what should change](docs/images/leaving-comments.png)
 
 ## How it works
 
@@ -27,18 +27,18 @@ It's easy to remove when you're ready to ship.
    `COMMENTS.md` again as reopened, with its history, so the agent knows its first try fell
    short.
 
-![Feedback mode: Pin comment and Whole page, the This page / All pages / Resolved filters, and collapsing the panel](docs/images/feedback-mode.gif)
+![Feedback mode: Pin comment and Whole page, the This page / All pages / Resolved filters, and collapsing the panel](docs/images/feedback-mode.png)
 
 Feedback mode's panel: **Pin comment** for a comment on one element, **Whole page** for one
 about the page as a whole, **View comments** for this page's or every page's open comments,
 and **Resolved** for the full history. Click the title to collapse the panel to one line.
 
-![Asking an agent to resolve the comments: it lists them, makes the changes, and marks each one done with a note](docs/images/ask-your-agent.png)
+![OpenCode asked to "resolve my in-app comments": it loads the skill, reads COMMENTS.md, makes the changes, marks each comment done with a note, and sums up](docs/images/ask-your-agent.png)
 
-<sub>An illustration of an agent session. The commands and their output are real; the agent's
-own words will vary.</sub>
+<sub>A real OpenCode session, run against a small demo app with the comments left in the
+recordings above (the start, the middle and the end of the session).</sub>
 
-![All comments: resolved comments with the agent's notes, and reopening one](docs/images/all-comments.gif)
+![All comments: resolved comments with the agent's notes, and reopening one](docs/images/all-comments.png)
 
 ## Install
 
