@@ -20,7 +20,15 @@ const hostnameOf = (value) => {
 /** Whether a page at this origin may call the API cross-origin, per the `cors` option. */
 function corsAllows(cors, origin) {
   if (!cors || !origin) return false;
-  if (typeof cors === "function") return !!cors(origin);
+  if (typeof cors === "function") {
+    // A check that throws (e.g. parsing "Origin: null") means "not allowed",
+    // never a crashed server.
+    try {
+      return !!cors(origin);
+    } catch {
+      return false;
+    }
+  }
   if (Array.isArray(cors)) return cors.includes(origin);
   return LOOPBACK.has(hostnameOf(origin));
 }

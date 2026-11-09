@@ -65,7 +65,14 @@ try {
   switch (cmd) {
     case "serve": {
       const origins = values.origin.map((o) => new URL(o).origin);
-      const loopback = (o) => ["localhost", "127.0.0.1", "[::1]"].includes(new URL(o).hostname);
+      // Browsers can send "Origin: null" (sandboxed frames, file:// pages): not a URL.
+      const loopback = (o) => {
+        try {
+          return ["localhost", "127.0.0.1", "[::1]"].includes(new URL(o).hostname);
+        } catch {
+          return false;
+        }
+      };
       const handler = createHandler({
         dir: values.dir,
         cors: (origin) => loopback(origin) || origins.includes(origin),

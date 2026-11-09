@@ -26,7 +26,7 @@
   ).replace(/\/$/, "");
   const config = window.agentFeedbackPins ?? {};
   // Kept equal to package.json's version (a test checks); bump both when releasing.
-  const VERSION = "0.2.1";
+  const VERSION = "0.2.2";
   const LATEST_URL = "https://raw.githubusercontent.com/dannyking/agent-feedback-pins/main/package.json";
   const UI_TAGS = "agent-feedback-pins, agent-feedback-pins-button";
 

@@ -215,3 +215,25 @@ test("injectHtml adds the script once", () => {
   assert.match(once, /<script src="\/__afp\/client.js" data-mount-before="#menu" data-agent-feedback-pins defer><\/script><\/head>/);
   assert.equal(injectHtml(once), once);
 });
+
+test("serve survives a malformed Origin header (Origin: null)", async () => {
+  const { spawn } = await import("node:child_process");
+  const port = 40000 + Math.floor(Math.random() * 20000);
+  const child = spawn(process.execPath, ["bin/agent-feedback-pins.js", "serve", "--port", String(port), "--dir", tmp()], { stdio: "ignore" });
+  try {
+    const url = `http://127.0.0.1:${port}/__afp/api/items`;
+    for (let i = 0; i < 50; i++) {
+      if (await fetch(url).then(() => true, () => false)) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    for (const origin of ["null", "not a url", "http://["]) {
+      const res = await fetch(url, { method: "OPTIONS", headers: { origin } });
+      assert.equal(res.headers.get("access-control-allow-origin"), null);
+    }
+    // Still serving afterwards, and loopback pages still get CORS.
+    const ok = await fetch(url, { method: "OPTIONS", headers: { origin: "http://localhost:5173" } });
+    assert.equal(ok.headers.get("access-control-allow-origin"), "http://localhost:5173");
+  } finally {
+    child.kill();
+  }
+});
