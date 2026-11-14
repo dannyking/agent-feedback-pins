@@ -32,6 +32,9 @@ It's easy to remove when you're ready to ship.
 Feedback mode's panel: **Pin comment** for a comment on one element, **Whole page** for one
 about the page as a whole, **View comments** for this page's or every page's open comments,
 and **Resolved** for the full history. Click the title to collapse the panel to one line.
+While Feedback is active, Escape closes its current editor or settings before exiting
+Feedback mode; it does not dismiss an app dialog underneath. When Feedback is inactive,
+Escape keeps the app's ordinary behavior.
 
 ![OpenCode asked to "resolve my in-app comments": it loads the skill, reads COMMENTS.md, makes the changes, marks each comment done with a note, and sums up](docs/images/ask-your-agent.png)
 
