@@ -229,12 +229,15 @@
   `;
 
   const BUTTON_CSS = `${VARS}
-    :host { display: inline-flex; }
-    :host([data-floating]) { position: fixed; left: 16px; bottom: 16px; z-index: 2147483000; }
+    :host { display: inline-flex; position: relative; z-index: 2147483647; }
+    :host([data-floating]) { position: fixed; left: 16px; bottom: 16px; }
     :host([data-floating*="right"]) { left: auto; right: 16px; }
     :host([data-floating^="top"]) { bottom: auto; top: 16px; }
     :host([data-floating]) .t { background: var(--p); box-shadow: 0 4px 16px rgb(0 0 0 / .15); }
     :host([data-themed]) .t { background: var(--p); }
+    .button-layer { position: fixed; inset: auto; margin: 0; padding: 0; border: 0;
+      background: transparent; color: inherit; overflow: visible; }
+    .placeholder { visibility: hidden; }
     .t { display: flex; align-items: center; gap: 8px; border-radius: 999px; border: 1px solid var(--l);
       padding: 6px 12px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--mu);
       transition: color .15s, background-color .15s, border-color .15s; }
@@ -246,7 +249,8 @@
   `;
 
   const OVERLAY_CSS = `${VARS}
-    :host { position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 2147483000; font-size: 14px;
+    :host { position: absolute; inset: auto; left: 0; top: 0; width: 0; height: 0; margin: 0; padding: 0;
+      border: 0; background: transparent; overflow: visible; z-index: 2147483647; font-size: 14px;
       line-height: 1.43; color: var(--fg); text-align: left; }
     .hl { pointer-events: none; position: fixed; border: 2px solid var(--a); border-radius: 6px;
       background: ${mix("--a", 10)}; transition: all 75ms; }
@@ -421,7 +425,41 @@
       showText ? h("span", { className: "label" }, state.active ? "Done" : label) : null,
       open > 0 ? h("span", { className: "badge" }, String(open)) : null,
     );
-    buttonRoot.replaceChildren(h("style", {}, BUTTON_CSS), btn);
+    if (typeof buttonHost.showPopover === "function") {
+      // Reserve the docked button's space while its interactive copy escapes stacking contexts.
+      const placeholder = btn.cloneNode(true);
+      placeholder.classList.add("placeholder");
+      placeholder.setAttribute("aria-hidden", "true");
+      placeholder.inert = true;
+      buttonRoot.replaceChildren(h("style", {}, BUTTON_CSS), placeholder,
+        h("div", { className: "button-layer", popover: "manual" }, btn));
+      syncLayers();
+    } else {
+      buttonRoot.replaceChildren(h("style", {}, BUTTON_CSS), btn);
+    }
+  }
+
+  function positionButton() {
+    const layer = buttonRoot.querySelector(".button-layer");
+    const placeholder = buttonRoot.querySelector(".placeholder");
+    if (!layer?.matches(":popover-open")) return;
+    const target = placeholder.getBoundingClientRect();
+    // Top-layer elements retain zoom, but escape ancestor transforms and clipping.
+    const rect = layer.getBoundingClientRect();
+    const scale = rect.width / parseFloat(getComputedStyle(layer).width);
+    const left = (parseFloat(layer.style.left) || 0) + (target.left - rect.left) / scale;
+    const top = (parseFloat(layer.style.top) || 0) + (target.top - rect.top) / scale;
+    layer.style.left = `${left}px`;
+    layer.style.top = `${top}px`;
+  }
+
+  function syncLayers(raise = false) {
+    for (const layer of [overlayHost, buttonRoot.querySelector(".button-layer")]) {
+      if (!layer?.isConnected || typeof layer.showPopover !== "function") continue;
+      if (raise && layer.matches(":popover-open")) layer.hidePopover();
+      if (!layer.matches(":popover-open")) layer.showPopover();
+    }
+    positionButton();
   }
 
   /** Keep the button docked where the page asked, even as a SPA re-renders around it. */
@@ -443,7 +481,12 @@
     } catch {
       // A saved selector that no longer parses: float instead.
     }
-    if (target) {
+    // Native modal dialogs make everything outside them inert, including popovers.
+    const modal = [...document.querySelectorAll("dialog:modal")].at(-1);
+    if (modal && !modal.contains(target)) {
+      buttonHost.setAttribute("data-floating", "bottom-left");
+      if (buttonHost.parentElement !== modal) modal.append(buttonHost);
+    } else if (target) {
       buttonHost.removeAttribute("data-floating");
       if (place === "before" && buttonHost.nextElementSibling !== target) target.before(buttonHost);
       if (place === "after" && buttonHost.previousElementSibling !== target) target.after(buttonHost);
@@ -460,11 +503,15 @@
       }
       if (buttonHost.parentElement !== document.body) document.body.append(buttonHost);
     }
+    const overlayParent = modal || document.body;
+    if (state.active && overlayHost.parentElement !== overlayParent) overlayParent.append(overlayHost);
+    syncLayers();
   }
 
   // ---------- The overlay: highlight, pins, editor, panel ----------
 
   const overlayHost = document.createElement("agent-feedback-pins");
+  if (typeof overlayHost.showPopover === "function") overlayHost.setAttribute("popover", "manual");
   const overlayRoot = overlayHost.attachShadow({ mode: "open" });
   // Measure the overlay's CSS units in viewport pixels, including inherited CSS zoom.
   const coordinateProbe = h("div", { style: {
@@ -1379,7 +1426,18 @@
     applyTheme();
     renderButton();
     dock();
-    new MutationObserver(dock).observe(document.body, { childList: true, subtree: true });
+    new MutationObserver(dock).observe(document.documentElement, {
+      childList: true, subtree: true, attributes: true, attributeFilter: ["open", "inert", "class", "style"],
+    });
+    new ResizeObserver(positionButton).observe(buttonHost);
+    addEventListener("resize", positionButton);
+    document.addEventListener("scroll", positionButton, true);
+    document.addEventListener("toggle", (e) => {
+      if (!isUi(e) && e.newState === "open") {
+        dock();
+        syncLayers(true);
+      }
+    }, true);
     void reload();
     void checkForUpdate();
   }
