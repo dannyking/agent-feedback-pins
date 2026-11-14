@@ -250,7 +250,7 @@
       line-height: 1.43; color: var(--fg); text-align: left; }
     .hl { pointer-events: none; position: fixed; border: 2px solid var(--a); border-radius: 6px;
       background: ${mix("--a", 10)}; transition: all 75ms; }
-    .pin { position: absolute; display: flex; align-items: center; justify-content: center; height: 24px;
+    .pin { position: fixed; display: flex; align-items: center; justify-content: center; height: 24px;
       min-width: 24px; padding: 0 4px; border-radius: 999px; border: 2px solid #fff; background: var(--a);
       color: var(--oa); font-size: 11px; font-weight: 900; box-shadow: 0 10px 15px -3px rgb(0 0 0 / .25); }
     .card { position: fixed; border-radius: 16px; background: var(--p); padding: 16px;
@@ -466,20 +466,37 @@
 
   const overlayHost = document.createElement("agent-feedback-pins");
   const overlayRoot = overlayHost.attachShadow({ mode: "open" });
+  // Measure the overlay's CSS units in viewport pixels, including inherited CSS zoom.
+  const coordinateProbe = h("div", { style: {
+    position: "fixed", left: "0", top: "0", width: "100px", height: "100px",
+    visibility: "hidden", pointerEvents: "none",
+  } });
   const highlight = h("div", { className: "hl", style: { display: "none" } });
   const pinsLayer = h("div");
   const editorSlot = h("div");
   const panelSlot = h("div");
   const modalSlot = h("div");
   // Later slots paint on top: the editor above the panel, a modal above both.
-  overlayRoot.append(h("style", {}, OVERLAY_CSS), highlight, pinsLayer, panelSlot, editorSlot, modalSlot);
+  overlayRoot.append(h("style", {}, OVERLAY_CSS), coordinateProbe, highlight, pinsLayer, panelSlot, editorSlot, modalSlot);
+
+  function overlayCoordinates() {
+    const r = coordinateProbe.getBoundingClientRect();
+    const scaleX = r.width / 100;
+    const scaleY = r.height / 100;
+    return {
+      x: (x) => (x - r.left) / scaleX,
+      y: (y) => (y - r.top) / scaleY,
+      width: (width) => width / scaleX,
+      height: (height) => height / scaleY,
+    };
+  }
 
   const globalStyle = h("style", { "data-agent-feedback-pins": "" }, GLOBAL_CSS);
 
   const onThisPage = (i) => i.route.split("?")[0] === location.pathname;
   const pageItems = () => state.items.filter((i) => onThisPage(i) && isOpen(i));
 
-  function pinPosition(item) {
+  function pinPosition(item, coords) {
     if (!item.element) return null;
     let rect = item.element.rect;
     try {
@@ -491,15 +508,16 @@
     } catch {
       // Invalid selector after a layout change: fall back to the stored position.
     }
-    return { left: rect.x + rect.width - 12, top: rect.y - 10 };
+    return { left: coords.x(rect.x + rect.width - scrollX) - 12, top: coords.y(rect.y - scrollY) - 10 };
   }
 
   function renderPins() {
     if (!prefs().showPins) return pinsLayer.replaceChildren();
+    const coords = overlayCoordinates();
     pinsLayer.replaceChildren(
       ...pageItems()
         .map((item) => {
-          const pos = pinPosition(item);
+          const pos = pinPosition(item, coords);
           if (!pos) return null;
           return h(
             "button",
@@ -524,9 +542,10 @@
     highlight.style.display = "none";
     const { editing, element: e } = draft;
     const canEdit = !editing || mine(editing);
+    const coords = overlayCoordinates();
     const w = 340;
-    const left = Math.min(Math.max(12, draft.at.x + 12), innerWidth - w - 12);
-    const top = Math.min(Math.max(12, draft.at.y + 12), innerHeight - 260);
+    const left = Math.min(Math.max(12, coords.x(draft.at.x) + 12), coords.x(innerWidth) - w - 12);
+    const top = Math.min(Math.max(12, coords.y(draft.at.y) + 12), coords.y(innerHeight) - 260);
     const target = e ? [e.section, e.label ?? e.text].filter(Boolean).join(" › ") : "Whole page";
     const area = h("textarea", {
       rows: 4,
@@ -1179,12 +1198,13 @@
     mousemove: (e) => {
       if ((state.draft && !state.picking) || state.modal || isUi(e) || !(e.target instanceof Element)) return (highlight.style.display = "none");
       const r = e.target.getBoundingClientRect();
+      const coords = overlayCoordinates();
       Object.assign(highlight.style, {
         display: "",
-        left: `${r.left - 2}px`,
-        top: `${r.top - 2}px`,
-        width: `${r.width + 4}px`,
-        height: `${r.height + 4}px`,
+        left: `${coords.x(r.left) - 2}px`,
+        top: `${coords.y(r.top) - 2}px`,
+        width: `${coords.width(r.width) + 4}px`,
+        height: `${coords.height(r.height) + 4}px`,
       });
     },
     click: (e) => {
@@ -1231,10 +1251,12 @@
       // Re-place pins as the layout shifts (polling data, drawers opening).
       timer = setInterval(renderPins, 1000);
       addEventListener("resize", onResize);
+      document.addEventListener("scroll", onResize, true);
       void reload();
     } else {
       clearInterval(timer);
       removeEventListener("resize", onResize);
+      document.removeEventListener("scroll", onResize, true);
       closeEditor();
       closeModal();
       state.picking = state.recording = false;

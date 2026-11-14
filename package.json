@@ -30,7 +30,11 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "test:browser": "playwright test"
   },
-  "types": "./src/index.d.ts"
+  "types": "./src/index.d.ts",
+  "devDependencies": {
+    "@playwright/test": "^1.65.1"
+  }
 }

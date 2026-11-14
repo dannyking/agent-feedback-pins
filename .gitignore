@@ -1,2 +1,4 @@
 node_modules/
 .agent-feedback-pins/
+test-results/
+playwright-report/
