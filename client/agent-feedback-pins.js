@@ -1270,6 +1270,8 @@
     },
     keydown: (e) => {
       if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
       if (state.picking) stopPicking(null);
       else if (state.modal) closeModal();
       else if (state.panelEditing) {
