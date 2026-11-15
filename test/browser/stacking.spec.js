@@ -5,7 +5,7 @@ const client = readFileSync(new URL('../../client/agent-feedback-pins.js', impor
 
 for (const docked of [false, true]) {
   test(`${docked ? 'docked' : 'floating'} feedback stays clickable above app overlays`, async ({ page }) => {
-    let settings = {};
+    let settings = docked ? {} : { position: { mode: 'floating', corner: 'top-right' } };
     await page.route('https://raw.githubusercontent.com/**', route => route.fulfill({ json: { version: '0.2.2' } }));
     await page.route('http://afp.test/**', route => {
       const path = new URL(route.request().url()).pathname;
@@ -41,8 +41,13 @@ for (const docked of [false, true]) {
     await feedback().click();
     await expect(exit()).toBeVisible();
     await exit().click();
+    const floatingPosition = !docked && await feedback().boundingBox();
     // A native dialog also makes the background inert; the feedback UI must remain interactive.
     await page.evaluate(() => document.querySelector('dialog').showModal());
+    if (!docked) await expect.poll(async () => {
+      const button = await feedback().boundingBox();
+      return Math.max(Math.abs(button.x - floatingPosition.x), Math.abs(button.y - floatingPosition.y));
+    }).toBeLessThan(1);
     await feedback().click();
     await page.getByRole('button', { name: 'Whole page', exact: true }).click();
     await page.getByPlaceholder('What should change here?').fill('Feedback on a modal');

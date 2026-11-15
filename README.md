@@ -213,6 +213,8 @@ Any other stack: run `npx github:dannyking/agent-feedback-pins serve` and add
   header's user menu). `data-mount="<selector>"` appends it inside one. Otherwise it floats
   bottom-left. These are defaults: people can move the button from [Settings](#settings). Add `data-dock-only` to hide it while that element isn't on the page (for example
   on a sign-in screen).
+  Opening an app modal keeps the button at its docked spot (or chosen floating corner),
+  while the feedback controls remain clickable above the modal.
 - `data-endpoint` overrides where the API lives (default: the script's folder).
 - `window.agentFeedbackPins = { headers: () => ({...}) }` adds headers to API calls, for apps that
   authenticate with bearer tokens.

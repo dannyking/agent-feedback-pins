@@ -385,6 +385,12 @@
 
   const buttonHost = document.createElement("agent-feedback-pins-button");
   const buttonRoot = buttonHost.attachShadow({ mode: "open" });
+  // A modal must own the interactive host, but its toolbar slot stays in place.
+  const buttonAnchor = document.createElement("agent-feedback-pins-anchor");
+  buttonAnchor.setAttribute("aria-hidden", "true");
+  buttonAnchor.inert = true;
+  buttonAnchor.style.pointerEvents = "none";
+  const anchorRoot = buttonAnchor.attachShadow({ mode: "open" });
   const ICONS = {
     chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     pin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
@@ -433,6 +439,7 @@
       placeholder.inert = true;
       buttonRoot.replaceChildren(h("style", {}, BUTTON_CSS), placeholder,
         h("div", { className: "button-layer", popover: "manual" }, btn));
+      anchorRoot.replaceChildren(h("style", {}, BUTTON_CSS), placeholder.cloneNode(true));
       syncLayers();
     } else {
       buttonRoot.replaceChildren(h("style", {}, BUTTON_CSS), btn);
@@ -443,7 +450,7 @@
     const layer = buttonRoot.querySelector(".button-layer");
     const placeholder = buttonRoot.querySelector(".placeholder");
     if (!layer?.matches(":popover-open")) return;
-    const target = placeholder.getBoundingClientRect();
+    const target = (buttonAnchor.isConnected ? anchorRoot.querySelector(".placeholder") : placeholder).getBoundingClientRect();
     // Top-layer elements retain zoom, but escape ancestor transforms and clipping.
     const rect = layer.getBoundingClientRect();
     const scale = rect.width / parseFloat(getComputedStyle(layer).width);
@@ -460,6 +467,14 @@
       if (!layer.matches(":popover-open")) layer.showPopover();
     }
     positionButton();
+    // Firefox and WebKit can finish top-layer layout after showPopover returns.
+    requestAnimationFrame(positionButton);
+  }
+
+  function placeAtDock(host, target, place) {
+    if (place === "before" && host.nextElementSibling !== target) target.before(host);
+    if (place === "after" && host.previousElementSibling !== target) target.after(host);
+    if (place === "inside" && host.parentElement !== target) target.append(host);
   }
 
   /** Keep the button docked where the page asked, even as a SPA re-renders around it. */
@@ -472,6 +487,7 @@
     if (position.mode === "hidden") {
       // Shortcut only. Feedback mode stays on if it was on: its panel has the way out.
       buttonHost.remove();
+      buttonAnchor.remove();
       buttonHost.removeAttribute("data-floating");
       return;
     }
@@ -484,17 +500,21 @@
     // Native modal dialogs make everything outside them inert, including popovers.
     const modal = [...document.querySelectorAll("dialog:modal")].at(-1);
     if (modal && !modal.contains(target)) {
-      buttonHost.setAttribute("data-floating", "bottom-left");
+      if (target && typeof buttonHost.showPopover === "function") placeAtDock(buttonAnchor, target, place);
+      else buttonAnchor.remove();
+      const corner = position.mode === "floating" ? position.corner : "bottom-left";
+      buttonHost.setAttribute("data-floating", corner);
       if (buttonHost.parentElement !== modal) modal.append(buttonHost);
     } else if (target) {
+      buttonAnchor.remove();
       buttonHost.removeAttribute("data-floating");
-      if (place === "before" && buttonHost.nextElementSibling !== target) target.before(buttonHost);
-      if (place === "after" && buttonHost.previousElementSibling !== target) target.after(buttonHost);
-      if (place === "inside" && buttonHost.parentElement !== target) target.append(buttonHost);
+      placeAtDock(buttonHost, target, place);
     } else if (script?.hasAttribute("data-dock-only") && position.mode === "default") {
+      buttonAnchor.remove();
       if (buttonHost.isConnected) setActive(false);
       buttonHost.remove();
     } else {
+      buttonAnchor.remove();
       // No dock (or not rendered yet, or the page has none): float in the corner.
       const corner = position.mode === "floating" ? position.corner : "bottom-left";
       if (buttonHost.getAttribute("data-floating") !== corner) {
