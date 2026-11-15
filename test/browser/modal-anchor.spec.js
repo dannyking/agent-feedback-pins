@@ -51,6 +51,18 @@ test('a docked Feedback button keeps its toolbar position through modal dialogs'
   await page.evaluate(() => document.querySelector('#settings').showModal());
   await page.getByRole('textbox', { name: 'Domain name' }).fill('Unsaved domain edits');
   await assertPosition();
+  // A responsive header can disappear while the modal remains open.
+  await page.locator('header').evaluate(element => { element.style.display = 'none'; });
+  await expect.poll(async () => {
+    const button = await feedback.boundingBox();
+    return Math.max(Math.abs(button.x - 16 * 1.625), Math.abs(button.y + button.height - (1000 - 16 * 1.625)));
+  }).toBeLessThan(1);
+  await feedback.click();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#settings')).toHaveAttribute('open', '');
+  await expect(page.getByRole('textbox', { name: 'Domain name' })).toHaveValue('Unsaved domain edits');
+  await page.locator('header').evaluate(element => { element.style.removeProperty('display'); });
+  await assertPosition();
   // This is an ordinary click, not force: the modal must not make Feedback inert.
   await feedback.click();
   await page.getByRole('button', { name: 'Whole page', exact: true }).click();

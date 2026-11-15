@@ -450,7 +450,9 @@
     const layer = buttonRoot.querySelector(".button-layer");
     const placeholder = buttonRoot.querySelector(".placeholder");
     if (!layer?.matches(":popover-open")) return;
-    const target = (buttonAnchor.isConnected ? anchorRoot.querySelector(".placeholder") : placeholder).getBoundingClientRect();
+    const anchor = anchorRoot.querySelector(".placeholder");
+    const hasDock = buttonAnchor.isConnected && anchor.getClientRects().length > 0;
+    const target = (hasDock ? anchor : placeholder).getBoundingClientRect();
     // Top-layer elements retain zoom, but escape ancestor transforms and clipping.
     const rect = layer.getBoundingClientRect();
     const scale = rect.width / parseFloat(getComputedStyle(layer).width);
